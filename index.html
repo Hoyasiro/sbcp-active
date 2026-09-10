@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>삼성영어 셀레나 출결 데스크탑 — Acad-atd-03_1.4</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="css/style.css">
+
+<!-- Vercel Web Analytics — 프레임워크 없이 스크립트 태그만으로 동작한다 -->
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
+</head>
+<body>
+<div id="app">
+
+  <nav class="sidebar">
+    <div class="side-brand">
+      <span class="brand-sub">Samsung English</span>
+      <span class="brand-name">Selena<span>.</span></span>
+    </div>
+    <div class="side-menu">
+      <button class="side-item active" id="tab-home" onclick="goTab('home')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1z"/><path d="M9 21V12h6v9"/></svg>출결 데스크
+      </button>
+      <button class="side-item" id="tab-students" onclick="goTab('students')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>학생 관리
+      </button>
+      <button class="side-item" id="tab-data" onclick="goTab('data')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>데이터 관리
+      </button>
+      <button class="side-item" id="tab-report" onclick="goTab('report')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>주간 리포트
+      </button>
+      <button class="side-item" id="tab-settings" onclick="goTab('settings')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>설정
+      </button>
+    </div>
+    <div class="side-footer">
+      Desktop Edition v1.4
+    </div>
+  </nav>
+
+  <main class="main-content">
+    
+    <div class="screen active" id="screen-home">
+      <div class="page-header">
+        <div>
+          <div class="page-title">출결 데스크</div>
+          <div class="page-sub">학생 번호를 입력하여 등/하원을 처리합니다.</div>
+        </div>
+        <div class="date-chip" id="dateChip"></div>
+      </div>
+      
+      <div class="home-grid">
+        <div class="input-area">
+          <div class="input-left">
+            <div class="attend-icon">📖</div>
+            <div class="attend-text">
+              <h3>등/하원 체크</h3>
+              <p>번호 2자리 입력 → 1회: 등원 · 2회: 하원</p>
+            </div>
+          </div>
+          <div class="input-center">
+            <input type="text" class="num-input" id="numInput" placeholder="00" maxlength="2" inputmode="numeric" autocomplete="off">
+            <div class="input-hint">두 자리 입력 시 자동 처리 (Enter 지원)</div>
+          </div>
+          <div class="result-wrapper">
+            <div class="result-box" id="resultBox">
+              <div class="result-icon" id="resultIcon"></div>
+              <div><div class="result-text" id="resultText"></div><div class="result-sub" id="resultSub"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="list-container">
+          <div class="list-header">
+            <div class="list-title">오늘 출결 현황</div>
+            <div class="stat-pills" id="statPills"></div>
+          </div>
+          <div class="list-scroll">
+            <div class="recent-list" id="recentList"></div>
+          </div>
+        </div>
+
+        <div class="list-container">
+          <div class="list-header">
+            <div class="list-title">출결 랭킹 TOP 3</div>
+            <span id="rankMonthLabel" style="font-size:13px;color:var(--text2);font-weight:700;"></span>
+          </div>
+          <div class="list-scroll">
+            <div class="rank3-group" id="rank3Group"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen" id="screen-students">
+      <div class="page-header">
+        <div>
+          <div class="page-title">학생 관리</div>
+          <div class="page-sub">학원에 등록된 원생 정보를 관리합니다.</div>
+        </div>
+      </div>
+      <div class="content-card">
+        <div class="stu-header-actions">
+          <div style="font-size:16px; font-weight:800; color:var(--navy);">
+            등록된 학생 <span style="color:var(--pink); margin-left:4px;" id="stuCount">0명</span>
+          </div>
+          <button class="add-btn" onclick="openAdd()">+ 학생 추가</button>
+        </div>
+        <div class="stu-scroll">
+          <div class="stu-grid" id="stuList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen" id="screen-data">
+      <div class="page-header">
+        <div>
+          <div class="page-title">데이터 관리</div>
+          <div class="page-sub">데이터를 백업하거나 엑셀(CSV)로 추출합니다.</div>
+        </div>
+      </div>
+      <div class="content-card" style="overflow-y:auto; padding-right:10px;">
+        <div class="data-grid">
+          <div class="data-section">
+            <div class="data-section-title">📊 엑셀 다운로드 (열람/인쇄용)</div>
+            <div class="dl-group">
+              <button class="dl-btn dl-att" onclick="dlAttendance()">
+                <span class="dl-icon">📅</span>
+                <span class="dl-info"><span class="dl-title">출결 기록 (월별)</span><span class="dl-desc">이번 달 전체 등·하원 시간 포함</span></span>
+              </button>
+              <button class="dl-btn dl-stu" onclick="dlStudents()">
+                <span class="dl-icon">👥</span>
+                <span class="dl-info"><span class="dl-title">학생 명단</span><span class="dl-desc">등록번호·이름·레벨 전체</span></span>
+              </button>
+              <button class="dl-btn dl-rank" onclick="dlRanking()">
+                <span class="dl-icon">🏆</span>
+                <span class="dl-info"><span class="dl-title">출결 랭킹 데이터</span><span class="dl-desc">당월 출결일수·체류시간·연속출석 기록 전체</span></span>
+              </button>
+            </div>
+            <div style="font-size:12px; color:var(--text2); margin-top:16px; line-height:1.5;">
+              • CSV 파일은 엑셀(Excel)에서 바로 열 수 있습니다.<br>
+              • 한글 깨짐 방지(UTF-8 BOM)가 적용되어 있습니다.
+            </div>
+          </div>
+
+          <div class="data-section">
+            <div class="data-section-title">💾 데이터 백업 및 복구 (시스템 이전용)</div>
+            <div class="dl-group">
+              <button class="dl-btn dl-backup" onclick="exportBackup()">
+                <span class="dl-icon">⬇️</span>
+                <span class="dl-info"><span class="dl-title">전체 데이터 백업 (내보내기)</span><span class="dl-desc">현재 학생 정보와 전체 출결 기록을 JSON 파일로 저장</span></span>
+              </button>
+              
+              <div class="upload-box">
+                <label class="upload-label">
+                  <span class="upload-icon">⬆️</span>
+                  <span>백업 파일 불러오기 (복구)</span>
+                  <input type="file" id="backupFileInput" accept=".json" onchange="importBackup(event)">
+                </label>
+                <div class="upload-hint">
+                  백업해둔 <b>acad_backup.json</b> 파일을 선택하세요.<br>
+                  <span style="color:var(--pink);">주의: 기존 데이터는 덮어쓰기 됩니다!</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="data-section hist-section">
+            <div class="data-section-title">📝 리포트 발송 이력</div>
+            <p class="holiday-desc">
+              AI가 생성한 리포트가 순서대로 기록됩니다. 항목을 누르면 전문을 볼 수 있습니다.<br>
+              최근 <b>1,000건</b>까지 보관되며, 초과분은 오래된 것부터 자동으로 제외됩니다.
+              화면에는 최근 50건만 표시되며, 전체 기록은 CSV로 내보낼 수 있습니다.
+            </p>
+            <div class="hist-actions">
+              <button class="holiday-btn" id="histDlBtn">CSV 내보내기</button>
+              <button class="hist-clear" id="histClearBtn">전체 삭제</button>
+            </div>
+            <div class="hist-list" id="dataHistoryList"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="screen" id="screen-report">
+      <div class="page-header">
+        <div>
+          <div class="page-title">주간 리포트</div>
+          <div class="page-sub">이번 주 출결을 집계하고 AI가 리포트를 작성합니다.</div>
+        </div>
+      </div>
+      <div class="content-card">
+        <div class="report-controls">
+          <div class="rc-row">
+            <label>학생 번호</label>
+            <div class="rc-code">
+              <input type="text" id="reportCode" placeholder="00" maxlength="2" inputmode="numeric" autocomplete="off">
+              <span class="rc-name" id="reportName">번호를 입력하세요</span>
+            </div>
+          </div>
+          <div class="rc-row">
+            <label>리포트 톤</label>
+            <div class="tone-group">
+              <button class="tone-btn active" data-tone="parent">학부모 발송용</button>
+              <button class="tone-btn" data-tone="student">학생 열람용</button>
+            </div>
+          </div>
+                    <button class="report-btn" id="reportBtn" style="display:none;">리포트 생성</button>
+        </div>
+
+        <div class="report-stats" id="reportStats"></div>
+        <div class="report-output" id="reportOutput"></div>
+
+        <div class="hist-recent">
+          <div class="hist-recent-title">최근 생성한 리포트</div>
+          <div class="hist-list" id="reportHistoryList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen" id="screen-settings">
+      <div class="page-header">
+        <div>
+          <div class="page-title">설정</div>
+          <div class="page-sub">학원 기본 정보 및 시스템 환경 설정</div>
+        </div>
+      </div>
+      <div class="content-card" style="align-items:flex-start;">
+        <div class="set-group" style="width:100%; max-width:500px; padding:16px 24px;">
+          <div class="set-title" style="margin-bottom:8px;">🔥 연속 출결 기준 안내</div>
+          <div style="font-size:13px; color:var(--text2); line-height:1.6;">
+            연속 출결은 <b>주말(토·일)을 제외</b>하고 자동으로 계산됩니다.<br>
+            예) 금요일 출석 후 다음 월요일에 출석하면 연속 출석 유지.
+          </div>
+        </div>
+
+        <div class="set-group" style="width:100%; max-width:500px;">
+          <div class="set-title">🎨 화면 테마</div>
+          <p class="holiday-desc">
+            어두운 환경에서 눈의 피로를 줄이려면 다크 모드를 사용하세요. 선택한 테마는 저장됩니다.
+          </p>
+          <button class="theme-btn" id="themeBtn">🌙 다크 모드로 전환</button>
+        </div>
+
+        <div class="set-group" style="width:100%; max-width:500px;">
+          <div class="set-title">📅 휴원일 관리</div>
+          <p class="holiday-desc">
+            공휴일·자체 휴강일을 등록하면 출석률 계산에서 제외됩니다.
+          </p>
+          <div class="holiday-add">
+            <input type="date" id="holidayInput">
+            <button class="holiday-btn" id="holidayAddBtn">추가</button>
+          </div>
+          <button class="holiday-fixed-btn" id="holidayFixedBtn">
+            올해 공휴일 한 번에 등록
+          </button>
+          <div class="holiday-list" id="holidayList"></div>
+        </div>
+        
+        <button class="save-btn" onclick="saveSettings()">설정 저장</button>
+
+        <div class="app-version-box" id="appVersionBox">
+          ℹ️ 현재 시스템 버전: <b id="appVersionText">-</b>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div class="mov" id="addMov" onclick="if(event.target===this)closeMov('addMov')">
+  <div class="msheet">
+    <div class="mtitle">👤 학생 추가</div>
+    <div class="mform">
+      <div class="f"><label>등록번호 (2자리) *</label><input type="text" id="mNo" placeholder="예: 01" maxlength="2" inputmode="numeric"></div>
+      <div class="f"><label>학생 이름 *</label><input type="text" id="mName" placeholder="홍길동"></div>
+      <div class="f"><label>레벨 (선택)</label><input type="text" id="mLevel" placeholder="예: Lv.3, Phonics 등"></div>
+    </div>
+    <div class="mbtns"><button class="mc" onclick="closeMov('addMov')">취소</button><button class="mk" onclick="addStu()">등록하기</button></div>
+  </div>
+</div>
+
+<div class="mov" id="editMov" onclick="if(event.target===this)closeMov('editMov')">
+  <div class="msheet">
+    <div class="mtitle">✏️ 학생 정보 수정</div>
+    <div class="mform">
+      <input type="hidden" id="eId">
+      <div class="f"><label>등록번호 (2자리) *</label><input type="text" id="eNo" maxlength="2" inputmode="numeric"></div>
+      <div class="f"><label>학생 이름 *</label><input type="text" id="eName"></div>
+      <div class="f"><label>레벨 (선택)</label><input type="text" id="eLevel"></div>
+    </div>
+    <div class="mbtns"><button class="mc" onclick="closeMov('editMov')">취소</button><button class="mk" onclick="saveEdit()">저장하기</button></div>
+  </div>
+</div>
+
+<div class="mov" id="recordMov" onclick="if(event.target===this)closeMov('recordMov')">
+  <div class="record-card">
+    <div class="record-hero">
+      <div class="record-emoji" id="recEmoji">🎉</div>
+      <div class="record-name" id="recName"></div>
+      <div class="record-status" id="recStatus"></div>
+    </div>
+    <div class="record-body">
+      <div class="record-grid">
+        <div class="record-stat">
+          <div class="record-stat-num" id="recMonthCount">0</div>
+          <div class="record-stat-label">이번 달 출결일</div>
+        </div>
+        <div class="record-stat">
+          <div class="record-stat-num" id="recStreak">0</div>
+          <div class="record-stat-label">현재 연속 출결</div>
+        </div>
+        <div class="record-stat">
+          <div class="record-stat-num" id="recBest">0</div>
+          <div class="record-stat-label">최장 연속 기록</div>
+        </div>
+        <div class="record-stat">
+          <div class="record-stat-num" id="recMinutes">0</div>
+          <div class="record-stat-label">당월 체류(분)</div>
+        </div>
+      </div>
+      <div class="record-rank-row">
+        <span class="record-rank-label">📅 이번 달 출결 랭킹</span>
+        <span class="record-rank-badge" id="recMonthRank">-</span>
+      </div>
+      <div class="record-rank-row">
+        <span class="record-rank-label">🔥 연속 출결 랭킹</span>
+        <span class="record-rank-badge" id="recStreakRank">-</span>
+      </div>
+      <button class="record-close" onclick="closeMov('recordMov')">확인 (닫기)</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="undo-toast" id="undoToast">
+  <div class="undo-text" id="undoText"></div>
+  <button class="undo-btn" onclick="triggerUndo()">취소하기</button>
+  <div class="undo-timer" id="undoTimerBar"></div>
+</div>
+
+<script src="js/main.js"></script>
+</body>
+</html>
