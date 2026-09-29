@@ -35,15 +35,29 @@ function fmtPhone(el){
   else el.value=v.slice(0,3)+'-'+v.slice(3,7)+'-'+v.slice(7,11);
 }
 
-// ===== 주말 제외 연속 출결 계산 =====
-function prevWeekday(dateStr){
-  var d = new Date(dateStr + 'T00:00:00');
-  do { d.setDate(d.getDate() - 1); } while (d.getDay() === 0 || d.getDay() === 6);
-  return fmtDate(d);
-}
+// ===== 연속 출결 계산 (주말·휴원일 제외) =====
+// 운영일 = 월~금 중 휴원일이 아닌 날. 연속은 "직전 운영일에도 출석했는가"로 판단한다.
+// 금요일 다음 월요일, 휴원일 앞뒤 운영일은 연속으로 이어진다.
 function isWeekend(dateStr){
   var d = new Date(dateStr + 'T00:00:00');
   return d.getDay() === 0 || d.getDay() === 6;
+}
+function isOperatingDay(dateStr){
+  return !isWeekend(dateStr) && !isHoliday(dateStr);
+}
+function prevOperatingDay(dateStr){
+  var d = new Date(dateStr + 'T00:00:00');
+  // 긴 연휴를 감안해도 60일이면 충분하다 (휴원일이 잘못 대량 등록된 경우의 무한 루프 방지)
+  for(var i = 0; i < 60; i++){
+    d.setDate(d.getDate() - 1);
+    var ds = fmtDate(d);
+    if(isOperatingDay(ds)) return ds;
+  }
+  return fmtDate(d);
+}
+function attendedOn(sid, dateStr){
+  var rec = DB.attendance[dateStr] && DB.attendance[dateStr][sid];
+  return !!(rec && rec.inTime);
 }
 
 function ensureStat(sid){
@@ -60,8 +74,7 @@ function recordAttendanceStat(sid, td){
   var ym = td.slice(0,7);
   st.monthly[ym] = (st.monthly[ym]||0) + 1;
 
-  var expectedPrev = prevWeekday(td);
-  if(st.lastAttendDate === expectedPrev) st.currentStreak += 1;
+  if(attendedOn(sid, prevOperatingDay(td))) st.currentStreak += 1;
   else st.currentStreak = 1;
 
   if(st.currentStreak > st.longestStreak) st.longestStreak = st.currentStreak;
@@ -94,8 +107,7 @@ function recalcStatsForStudent(sid){
   dates.forEach(function(td){
     var ym = td.slice(0,7);
     st.monthly[ym] = (st.monthly[ym]||0) + 1;
-    var expectedPrev = prevWeekday(td);
-    if(st.lastAttendDate === expectedPrev) st.currentStreak += 1;
+    if(attendedOn(sid, prevOperatingDay(td))) st.currentStreak += 1;
     else st.currentStreak = 1;
     if(st.currentStreak > st.longestStreak) st.longestStreak = st.currentStreak;
     st.lastAttendDate = td;
@@ -113,10 +125,14 @@ function liveStreak(sid){
   if(!st || !st.lastAttendDate) return 0;
   var td = today();
   if(st.lastAttendDate === td) return st.currentStreak;
-  var checkDate = isWeekend(td) ? td : td;
-  var expectedPrev = prevWeekday(checkDate);
-  if(st.lastAttendDate >= expectedPrev) return st.currentStreak;
+  // 오늘 아직 안 왔어도 직전 운영일까지 이어졌다면 연속은 살아 있다
+  if(st.lastAttendDate >= prevOperatingDay(td)) return st.currentStreak;
   return 0;
+}
+
+// 휴원일이 바뀌면 과거 연속 기록도 달라지므로 전원 다시 계산한다
+function recalcAllStats(){
+  DB.students.forEach(function(s){ recalcStatsForStudent(s.id); });
 }
 
 // ===== 랭킹 계산 =====
@@ -175,6 +191,9 @@ function showResult(type, title, sub){
 }
 
 document.addEventListener('DOMContentLoaded', function(){
+  // 저장된 요약(stats)이 이전 규칙(주말만 제외)으로 계산돼 있을 수 있으므로 시작 시 원본에서 다시 만든다
+  recalcAllStats(); save();
+
   var d=new Date();
   document.getElementById('dateChip').textContent = d.toLocaleDateString('ko-KR',{month:'long',day:'numeric',weekday:'short'});
   document.getElementById('rankMonthLabel').textContent = (d.getMonth()+1)+'월 기준';
@@ -477,7 +496,7 @@ function dlStudents(){
 
 function dlRanking(){
   var ym=curYM();
-  var rows=[['등록번호','이름','레벨','이번달 출결일수','이번달 체류시간(분)','현재 연속출석(주말제외)','최장 연속기록']];
+  var rows=[['등록번호','이름','레벨','이번달 출결일수','이번달 체류시간(분)','현재 연속출석(주말·휴원일 제외)','최장 연속기록']];
   var sorted=[].concat(DB.students).sort(function(a,b){return a.no.localeCompare(b.no);});
   sorted.forEach(function(s){
     var st=DB.stats[s.id];
@@ -648,6 +667,7 @@ function addFixedHolidays(){
       added++;
     }
   });
+  if(added > 0) recalcAllStats();
   save();
   renderHolidays();
   if(added > 0) showToast('✅ ' + year + '년 공휴일 ' + added + '일이 추가되었습니다.');
@@ -682,6 +702,7 @@ function addHoliday(){
   if(!d){ showToast('날짜를 선택해 주세요.'); return; }
   if(isHoliday(d)){ showToast('이미 등록된 날짜입니다.'); return; }
   DB.holidays.push(d);
+  recalcAllStats();
   save();
   renderHolidays();
   input.value = '';
@@ -690,6 +711,7 @@ function addHoliday(){
 
 function removeHoliday(dateStr){
   DB.holidays = DB.holidays.filter(function(d){ return d !== dateStr; });
+  recalcAllStats();
   save();
   renderHolidays();
   showToast('휴원일에서 제외되었습니다.');
@@ -740,7 +762,7 @@ function weekDays(monday){
   var d = new Date(monday + 'T00:00:00');
   for(var i = 0; i < 5; i++){
     var ds = fmtDate(d);
-    if(!isWeekend(ds) && !isHoliday(ds)) days.push(ds);
+    if(isOperatingDay(ds)) days.push(ds);
     d.setDate(d.getDate() + 1);
   }
   return days;
