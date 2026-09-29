@@ -52,7 +52,7 @@ body::after { content:''; position:fixed; bottom:-150px; left:-150px; width:450p
 .date-chip { padding:8px 16px; border-radius:12px; font-size:14px; font-weight:700; color:var(--navy); background:rgba(235,49,146,.08); border:1px solid rgba(235,49,146,.18); display:flex; align-items:center; }
 
 /* ================= 홈 (출결) 그리드 레이아웃 ================= */
-.home-grid { display:grid; grid-template-columns: 1fr 1.2fr; grid-template-rows: auto 1fr; gap:24px; height:100%; overflow:hidden; }
+.home-grid { display:grid; grid-template-columns: 1fr 0.9fr 1.2fr; grid-template-rows: auto 1fr; gap:24px; height:100%; overflow:hidden; }
 
 /* 1. 상단 입력창 (Full width) */
 .input-area { grid-column:1 / -1; background:var(--surface-glass); backdrop-filter:blur(10px); border-radius:28px; padding:30px 40px; box-shadow:var(--shadow); display:flex; align-items:center; justify-content:space-between; border:1px solid rgba(235,49,146,.15); flex-shrink:0; }
@@ -80,8 +80,8 @@ body::after { content:''; position:fixed; bottom:-150px; left:-150px; width:450p
 
 /* 2. 하단 리스트 컨테이너 공통 (오늘 현황 & 랭킹) */
 .list-container { background:var(--surface-glass); backdrop-filter:blur(10px); border-radius:24px; padding:24px; box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(235,49,146,.10); }
-.list-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-shrink:0; }
-.list-title { display:flex; align-items:center; gap:8px; font-size:16px; font-weight:800; color:var(--navy); }
+.list-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 12px; margin-bottom:16px; flex-shrink:0; }
+.list-title { white-space:nowrap; display:flex; align-items:center; gap:8px; font-size:16px; font-weight:800; color:var(--navy); }
 .list-title::before { content:''; width:4px; height:18px; border-radius:2px; background:var(--pink); display:block; }
 .list-scroll { flex:1; overflow-y:auto; padding-right:8px; }
 /* 스크롤바 커스텀 */
@@ -91,7 +91,7 @@ body::after { content:''; position:fixed; bottom:-150px; left:-150px; width:450p
 .list-scroll::-webkit-scrollbar-thumb:hover { background: rgba(235,49,146,.5); }
 
 /* 오늘 현황 리스트 요소 */
-.stat-pills { display:flex; gap:8px; margin-bottom:16px; flex-shrink:0; }
+.stat-pills { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; flex-shrink:0; }
 .spill { font-size:13px; font-weight:700; padding:6px 14px; border-radius:20px; display:flex; align-items:center; gap:6px; }
 .spill-in { background:var(--green-light); color:#15803d; }
 .spill-out { background:var(--orange-light); color:#c2410c; }
@@ -501,3 +501,42 @@ body, .content-card, .list-container, .input-area,
   .hist-actions { flex-direction:column; }
   .hist-clear, .hist-actions .holiday-btn { width:100%; }
 }
+
+/* ================= 지난주 리포트 (보드 · 기록 팝업 · 자동 생성 현황) ================= */
+.board-select { max-width:150px; padding:6px 10px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--navy); font-size:13px; font-weight:700; font-family:'Noto Sans KR',sans-serif; cursor:pointer; outline:none; }
+.board-select:focus { border-color:var(--pink); }
+.board-card { background:var(--surface); border-radius:18px; padding:20px; border:1px solid var(--border); }
+.board-card.fade { animation:lwFade .45s ease; }
+@keyframes lwFade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+.board-dots { display:flex; justify-content:center; flex-wrap:wrap; gap:6px; padding-top:12px; min-height:22px; }
+.board-dots i { width:7px; height:7px; border-radius:50%; background:var(--border); display:block; }
+.board-dots i.on { background:var(--pink); width:18px; border-radius:4px; }
+.board-count, .board-pin { font-size:12px; font-weight:700; color:var(--text2); }
+
+.lw-who { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+.lw-name { font-size:20px; font-weight:900; color:var(--navy); }
+.lw-level { font-size:12px; font-weight:700; color:var(--text2); }
+.lw-period { font-size:12px; font-weight:700; color:var(--text2); margin-left:auto; font-family:'Outfit',sans-serif; }
+.lw-title { display:flex; align-items:baseline; gap:8px; font-size:14px; font-weight:800; color:var(--navy); margin-bottom:10px; }
+.lw-stats { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:12px; }
+.lw-grade { padding:4px 10px; border-radius:8px; font-size:13px; font-weight:900; }
+.lw-stat { font-size:13px; color:var(--text2); background:var(--gray); padding:4px 10px; border-radius:8px; }
+.lw-stat b { color:var(--pink); font-family:'Outfit',sans-serif; font-size:15px; }
+.lw-text { font-size:14px; line-height:1.7; color:var(--text); }
+.lw-pending, .lw-msg { font-size:13px; line-height:1.6; color:var(--text2); background:var(--gray); border-radius:12px; padding:12px 14px; }
+
+.record-card { max-height:92vh; overflow-y:auto; }
+.record-lastweek { background:var(--gray); border-radius:16px; padding:16px; margin-bottom:14px; }
+.record-lastweek .lw-stat { background:var(--surface); }
+.record-lastweek .lw-text { font-size:13px; }
+.record-lastweek .lw-pending, .record-lastweek .lw-msg { background:var(--surface); }
+
+.auto-status { margin-top:20px; padding:16px 18px; border-radius:16px; border:1px dashed var(--border); background:var(--surface); }
+.auto-status:empty { display:none; }
+.auto-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; font-size:14px; color:var(--navy); }
+.auto-period { font-size:12px; color:var(--text2); margin-left:6px; font-family:'Outfit',sans-serif; font-weight:700; }
+.auto-slots { display:flex; gap:6px; }
+.auto-slot { font-size:12px; font-weight:700; padding:4px 10px; border-radius:8px; background:var(--gray); color:var(--text2); }
+.auto-slot.done { background:var(--teal-light); color:#0e7490; }
+.auto-state { font-size:13px; color:var(--text2); margin-top:8px; }
+.auto-now { margin-top:10px; padding:8px 14px; border:none; border-radius:10px; background:var(--navy-solid); color:#fff; font-size:13px; font-weight:700; font-family:'Noto Sans KR',sans-serif; cursor:pointer; }

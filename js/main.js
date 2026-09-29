@@ -1,5 +1,5 @@
-// [v1.4 업데이트] 앱 버전 
-var APP_VERSION = 'Acad-atd-03_1.4 (Desktop)';
+// [v1.5 업데이트] 앱 버전 — 지난주 리포트 자동 생성·보드
+var APP_VERSION = 'Acad-atd-03_1.5 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
 var STORAGE_KEY = 'acad-atd-03_1.4';
 
 var DEF_SETTINGS = { academyName:'삼성영어 셀레나', phone:'' };
@@ -11,6 +11,7 @@ try {
   if(_s) DB=Object.assign({students:[],attendance:{},stats:{},holidays:[],settings:Object.assign({},DEF_SETTINGS)}, JSON.parse(_s)); 
 } catch(e){}
 if(!DB.holidays) DB.holidays = [];   // 기존 저장 데이터에는 holidays가 없으므로 보정
+ensureWeekly();                        // 지난주 리포트 저장소도 같은 방식으로 보정
 function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(DB)); }catch(e){} }
 
 if(!DB.students.length){
@@ -130,6 +131,18 @@ function liveStreak(sid){
   return 0;
 }
 
+// 특정 날짜(보통 지난주 마지막 운영일) 기준의 연속 출석.
+// 지난주 리포트는 "지난주가 끝났을 때"의 연속 기록을 써야 하므로 liveStreak와 따로 둔다.
+function streakEndingAt(sid, dateStr){
+  var d = isOperatingDay(dateStr) ? dateStr : prevOperatingDay(dateStr);
+  var cnt = 0;
+  for(var i = 0; i < 400 && attendedOn(sid, d); i++){
+    cnt++;
+    d = prevOperatingDay(d);
+  }
+  return cnt;
+}
+
 // 휴원일이 바뀌면 과거 연속 기록도 달라지므로 전원 다시 계산한다
 function recalcAllStats(){
   DB.students.forEach(function(s){ recalcStatsForStudent(s.id); });
@@ -169,13 +182,13 @@ function goTab(n){
   document.getElementById('tab-'+n).classList.add('active');
   
   if(n==='home'){
-    renderRecent(); renderRank3Group();
+    renderRecent(); renderRank3Group(); renderBoard();
     setTimeout(function(){document.getElementById('numInput').focus();},100);
   }
   if(n==='students') renderStudents();
   if(n==='settings') loadSettings();
   if(n==='data') renderReportHistory('dataHistoryList', 50);
-  if(n==='report'){ fillStudentSelect(); renderReportHistory('reportHistoryList', 5); }
+  if(n==='report'){ fillStudentSelect(); renderReportHistory('reportHistoryList', 5); renderAutoStatus(); }
 }
 
 // ===== 출결 입력 처리 =====
@@ -215,7 +228,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // 화면 클릭 시 항상 입력창 포커스 복귀 (홈 화면일때만)
   document.addEventListener('click', function(e){
     var homeScreen = document.getElementById('screen-home');
-    if(homeScreen && homeScreen.classList.contains('active') && e.target.tagName !== 'BUTTON' && !e.target.closest('.mov')) {
+    if(homeScreen && homeScreen.classList.contains('active') && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'OPTION' && !e.target.closest('.mov')) {
       input.focus();
     }
   });
@@ -291,6 +304,7 @@ function openRecordPopup(sid, isNewBest){
   document.getElementById('recMinutes').textContent = st.monthlyMinutes[ym] || 0;
   document.getElementById('recMonthRank').textContent = monthRank ? (monthRank+'위 / '+DB.students.length+'명') : '-';
   document.getElementById('recStreakRank').textContent = streakRank ? (streakRank+'위 / '+DB.students.length+'명') : '-';
+  document.getElementById('recLastWeek').innerHTML = lastWeekHtml(sid, true);
 
   document.getElementById('recordMov').classList.add('show');
 }
@@ -815,7 +829,8 @@ function weeklyStats(sid, baseDate){
     present: present,      // 출석일
     rate: rate,            // 출석률 %
     grade: gradeOf(rate),  // 등급
-    streak: liveStreak(sid),
+    // 이번 주는 실시간 연속, 지난 주는 그 주가 끝났을 때의 연속
+    streak: monday < weekStart() ? streakEndingAt(sid, days.length ? days[days.length-1] : monday) : liveStreak(sid),
     bestStreak: st.longestStreak || 0,
     avgMinutes: avgMin,
     noCheckout: noCheckout
@@ -911,7 +926,7 @@ var REPORT_HISTORY_KEY = 'acad-report-history';
 // 항목당 700바이트 남짓이라 전체 0.7MB 수준이며, 출결 데이터와 함께 써도 여유가 있다.
 var REPORT_HISTORY_MAX = 1000;
 
-var TONE_LABEL = { parent:'학부모 발송용', student:'학생 열람용' };
+var TONE_LABEL = { parent:'학부모 발송용', student:'학생 열람용', peer:'지난주 보드(자동)' };
 
 function loadReportHistory(){
   try {
@@ -1183,6 +1198,11 @@ async function generateReport(){
 
   // 이번 주 출결 기록이 0건이면 API를 호출하지 않는다 (S1 정의서 F-1)
   // 카드(0/5, 0%)는 그대로 두고 안내 문구만 띄운다
+  // 한 주 전체가 휴원이면 원인이 다르므로 안내도 따로 한다
+  if(st.totalDays === 0){
+    showReportMessage('info', '이번 주는 전체 휴원(운영일 0일)이라 리포트를 만들 출결이 없습니다.');
+    return;
+  }
   if(st.present === 0){
     showReportMessage('error', '이번 주 출결 기록이 없습니다. 출결 현황 기록을 확인해주세요.');
     return;
@@ -1255,4 +1275,304 @@ document.addEventListener('DOMContentLoaded', function(){
       if(e.key === 'Enter') generateReport();
     });
   }
+});
+
+// ===== 지난주 리포트 (자동 생성 + 친구 보드) =====
+// 이번 주에 등원하는 학생이 "지난주 나의 리포트"를 보고,
+// 출결 데스크의 보드에서 친구들의 지난주 리포트를 돌려 보며 서로 자극을 받게 한다.
+//
+//   자동 생성 — 원장이 버튼을 누르지 않는다. 데스크 PC가 켜져 있으면
+//              평일 13:30에 1차 시도, 14:00에 실패·누락분만 다시 시도한다.
+//              PC를 늦게 켰다면 켜진 직후 1차, 끝나는 대로 2차가 이어서 돈다.
+//   노출 규칙 — 생성 전에 등원한 학생은 그날 팝업에서 통계만 본다.
+//              AI 한마디는 생성이 끝난 뒤(보통 다음 날 등원 때)부터 보인다.
+//   보드     — 4초마다 한 명씩 순환. 드롭다운으로 특정 친구를 고정해 볼 수 있고,
+//              20초간 조작이 없으면 다시 순환으로 돌아간다(공용 PC라 고정된 채 방치되지 않도록).
+
+var AUTO_SLOTS        = ['13:30', '14:00'];  // 1차 시도, 2차(미생성분 재시도)
+var BOARD_INTERVAL_MS = 4000;
+var BOARD_RESUME_MS   = 20000;
+var WEEKLY_KEEP_WEEKS = 8;                   // 오래된 주차는 자동 정리
+
+function ensureWeekly(){
+  if(!DB.weekly || typeof DB.weekly !== 'object') DB.weekly = {};
+  if(!DB.weekly.reports) DB.weekly.reports = {};   // { 지난주월요일: { 학생ID: {text, at} } }
+  if(!DB.weekly.tries)   DB.weekly.tries   = {};   // { 이번주월요일: { '13:30': '시도시각', ... } }
+  return DB.weekly;
+}
+
+function lastWeekMonday(){
+  var d = new Date(weekStart() + 'T00:00:00');
+  d.setDate(d.getDate() - 7);
+  return fmtDate(d);
+}
+
+function lastWeekStats(sid){ return weeklyStats(sid, lastWeekMonday()); }
+
+function lastWeekReport(sid){
+  var bucket = ensureWeekly().reports[lastWeekMonday()];
+  return (bucket && bucket[sid]) || null;
+}
+
+function mmdd(ds){ return Number(ds.slice(5,7)) + '/' + Number(ds.slice(8,10)); }
+
+// 오래된 주차 정리 (저장 공간 보호)
+function pruneWeekly(){
+  var w = ensureWeekly();
+  ['reports','tries'].forEach(function(k){
+    var weeks = Object.keys(w[k]).sort();
+    while(weeks.length > WEEKLY_KEEP_WEEKS) delete w[k][weeks.shift()];
+  });
+}
+
+// ----- 자동 생성 -----
+var _weeklyRunning = false;
+
+// 대상: 지난주 운영일이 있고, 한 번이라도 출석했고, 아직 리포트가 없는 학생
+function weeklyTargets(){
+  var mon = lastWeekMonday();
+  return DB.students.filter(function(s){
+    if(lastWeekReport(s.id)) return false;
+    var st = weeklyStats(s.id, mon);
+    return st.totalDays > 0 && st.present > 0;
+  });
+}
+
+async function runWeeklyGeneration(){
+  if(_weeklyRunning) return;
+  _weeklyRunning = true;
+  renderAutoStatus();
+
+  var mon = lastWeekMonday();
+  var w = ensureWeekly();
+  var targets = weeklyTargets();
+  var failed = 0;
+
+  // 한 명씩 차례로 호출한다 (동시 호출 시 API 제한·과금 폭주 방지)
+  for(var i = 0; i < targets.length; i++){
+    var s = targets[i];
+    var st = weeklyStats(s.id, mon);
+    try {
+      var r = await callReportApi(buildReportData(st), 'peer');
+      if(r && r.ok){
+        if(!w.reports[mon]) w.reports[mon] = {};
+        w.reports[mon][s.id] = { text: r.text, at: fmtDate(new Date()) + ' ' + nowT() };
+        save();
+        addReportHistory(st, 'peer', r.text);
+      } else {
+        failed++;
+        console.warn('지난주 리포트 생성 실패:', s.name, r && r.error);
+      }
+    } catch(e){
+      // 네트워크 자체가 안 되면 나머지도 실패하므로 여기서 멈추고 다음 시도에 맡긴다
+      failed += targets.length - i;
+      console.error('지난주 리포트 요청 실패:', e);
+      break;
+    }
+    renderAutoStatus();
+  }
+
+  pruneWeekly(); save();
+  _weeklyRunning = false;
+  renderAutoStatus();
+  renderBoard();
+  return failed;
+}
+
+// 30초마다 확인. 지난 시각의 슬롯 중 아직 시도하지 않은 것을 하나씩 실행한다
+function autoTick(){
+  if(_weeklyRunning) return;
+  var td = today();
+  if(isWeekend(td)) return;                 // 주말에는 돌리지 않는다
+
+  var w = ensureWeekly();
+  var thisMon = weekStart();
+  var tries = w.tries[thisMon] || (w.tries[thisMon] = {});
+  var now = nowT();
+
+  for(var i = 0; i < AUTO_SLOTS.length; i++){
+    var slot = AUTO_SLOTS[i];
+    if(now >= slot && !tries[slot]){
+      tries[slot] = td + ' ' + now;         // 먼저 표시해 두어 중복 실행을 막는다
+      save();
+      runWeeklyGeneration();
+      return;
+    }
+  }
+}
+
+// 원장 화면 — 자동 생성 현황 (수동 버튼은 비상용)
+function renderAutoStatus(){
+  var box = document.getElementById('autoStatus');
+  if(!box) return;
+  var mon = lastWeekMonday();
+  var days = weekDays(mon);
+  var lastDay = days.length ? days[days.length-1] : mon;
+  var w = ensureWeekly();
+  var tries = w.tries[weekStart()] || {};
+  var made = Object.keys(w.reports[mon] || {}).length;
+  var remain = weeklyTargets().length;
+
+  var slotHtml = AUTO_SLOTS.map(function(sl){
+    return '<span class="auto-slot' + (tries[sl] ? ' done' : '') + '">' + sl + ' '
+      + (tries[sl] ? '시도함' : '대기') + '</span>';
+  }).join('');
+
+  var stateText;
+  if(!days.length)          stateText = '지난주는 전체 휴원이라 생성할 리포트가 없습니다.';
+  else if(_weeklyRunning)   stateText = '생성 중... (' + made + '건 완료, ' + remain + '건 남음)';
+  else if(remain === 0)     stateText = '대상 학생 리포트가 모두 준비되었습니다. (' + made + '건)';
+  else                      stateText = made + '건 생성 · ' + remain + '건 미생성';
+
+  box.innerHTML =
+      '<div class="auto-head">'
+    +   '<div><b>지난주 리포트 자동 생성</b> <span class="auto-period">'
+    +     mmdd(mon) + ' ~ ' + mmdd(lastDay) + '</span></div>'
+    +   '<div class="auto-slots">' + slotHtml + '</div>'
+    + '</div>'
+    + '<div class="auto-state">' + stateText + '</div>'
+    + ((remain > 0 && !_weeklyRunning)
+        ? '<button class="auto-now" id="autoNowBtn">미생성분 지금 생성</button>' : '');
+
+  var btn = document.getElementById('autoNowBtn');
+  if(btn) btn.addEventListener('click', function(){ runWeeklyGeneration(); });
+}
+
+// ----- 화면 조각: 지난주 리포트 카드 -----
+// inPopup=true면 본인용(기록 팝업), false면 보드용
+function lastWeekHtml(sid, inPopup){
+  var s = DB.students.find(function(x){ return x.id === sid; });
+  if(!s) return '';
+  var st = lastWeekStats(sid);
+  var rep = lastWeekReport(sid);
+  var period = mmdd(st.monday) + ' ~ ' + mmdd(st.lastDay);
+
+  var head = inPopup
+    ? '<div class="lw-title">📋 지난주 나의 리포트 <span class="lw-period">' + period + '</span></div>'
+    : '<div class="lw-who"><span class="lw-name">' + s.name + '</span>'
+      + '<span class="lw-level">' + (s.level || '') + '</span>'
+      + '<span class="lw-period">' + period + '</span></div>';
+
+  // 한 주 전체 휴원 (운영일 0일)
+  if(st.totalDays === 0){
+    return head + '<div class="lw-msg">지난주는 전체 휴원이었어요. 이번 주도 함께 힘내요! 💪</div>';
+  }
+  // 지난주 출석 0일 — 등급(주의)을 드러내지 않고 응원만 한다
+  if(st.present === 0){
+    return head + '<div class="lw-msg">지난주에는 출석 기록이 없어요. 이번 주에 새로 시작해 봐요! 🌱</div>';
+  }
+
+  var stats =
+      '<div class="lw-stats">'
+    +   '<span class="lw-grade grade-' + st.grade + '">' + st.grade + '</span>'
+    +   '<span class="lw-stat"><b>' + st.present + '/' + st.totalDays + '</b>일 출석</span>'
+    +   '<span class="lw-stat">🔥 <b>' + st.streak + '</b>일 연속</span>'
+    +   '<span class="lw-stat">⏱️ 평균 <b>' + st.avgMinutes + '</b>분</span>'
+    + '</div>';
+
+  var text = rep
+    ? '<div class="lw-text">' + rep.text + '</div>'
+    : '<div class="lw-pending">AI 한마디는 준비 중이에요. '
+      + (inPopup ? '다음 등원 때 확인할 수 있어요!' : '오후 1시 30분 이후 공개됩니다.') + '</div>';
+
+  return head + stats + text;
+}
+
+// ----- 친구 보드 (4초 순환 + 드롭다운 고정) -----
+var _boardIdx = 0, _boardPinned = null, _boardTimer = null, _boardResumeTimer = null;
+
+// 순환 대상: 지난주 한 번이라도 출석한 학생 (0일인 친구를 공개적으로 돌리지 않는다)
+function boardRotation(){
+  var mon = lastWeekMonday();
+  return [].concat(DB.students)
+    .sort(function(a,b){ return a.no.localeCompare(b.no); })
+    .filter(function(s){ return weeklyStats(s.id, mon).present > 0; });
+}
+
+function fillBoardSelect(){
+  var sel = document.getElementById('boardSelect');
+  if(!sel) return;
+  var sorted = [].concat(DB.students).sort(function(a,b){ return a.no.localeCompare(b.no); });
+  // 4초마다 불리므로 명단이 바뀌었을 때만 다시 그린다 (열려 있는 드롭다운이 닫히지 않도록)
+  var sig = sorted.map(function(s){ return s.id + ':' + s.no + ':' + s.name; }).join('|');
+  if(sel._sig === sig) return;
+  sel._sig = sig;
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">🔄 전체 순환</option>'
+    + sorted.map(function(s){
+        return '<option value="' + s.id + '">' + s.no + ' ' + s.name + '</option>';
+      }).join('');
+  sel.value = cur;
+  if(sel.value !== cur) sel.value = '';
+}
+
+function renderBoard(){
+  var card = document.getElementById('boardCard');
+  var dots = document.getElementById('boardDots');
+  if(!card) return;
+  fillBoardSelect();
+
+  if(_boardPinned){
+    card.innerHTML = lastWeekHtml(_boardPinned, false);
+    if(dots) dots.innerHTML = '<span class="board-pin">📌 선택한 친구 보기 · 잠시 후 순환으로 돌아갑니다</span>';
+    return;
+  }
+
+  var list = boardRotation();
+  if(!list.length){
+    var noDays = weekDays(lastWeekMonday()).length === 0;
+    card.innerHTML = '<div class="lw-msg">' + (noDays
+      ? '지난주는 전체 휴원이었어요. 이번 주 기록이 다음 주 보드에 올라옵니다!'
+      : '아직 보드에 올릴 지난주 기록이 없어요.') + '</div>';
+    if(dots) dots.innerHTML = '';
+    return;
+  }
+
+  _boardIdx = _boardIdx % list.length;
+  card.innerHTML = lastWeekHtml(list[_boardIdx].id, false);
+  card.classList.remove('fade'); void card.offsetWidth; card.classList.add('fade');
+  if(dots){
+    dots.innerHTML = list.length > 12
+      ? '<span class="board-count">' + (_boardIdx + 1) + ' / ' + list.length + '</span>'
+      : list.map(function(_, i){ return '<i class="' + (i === _boardIdx ? 'on' : '') + '"></i>'; }).join('');
+  }
+}
+
+function boardNext(){
+  if(_boardPinned) return;
+  var home = document.getElementById('screen-home');
+  if(home && !home.classList.contains('active')) return;   // 다른 화면에서는 돌리지 않는다
+  _boardIdx++;
+  renderBoard();
+}
+
+function pinBoard(sidStr){
+  clearTimeout(_boardResumeTimer);
+  _boardPinned = sidStr ? Number(sidStr) : null;
+  if(_boardPinned){
+    _boardResumeTimer = setTimeout(function(){
+      _boardPinned = null;
+      var sel = document.getElementById('boardSelect');
+      if(sel) sel.value = '';
+      renderBoard();
+    }, BOARD_RESUME_MS);
+  }
+  renderBoard();
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  var sel = document.getElementById('boardSelect');
+  if(sel){
+    sel.addEventListener('change', function(){
+      pinBoard(this.value);
+      // 드롭다운을 쓴 뒤에도 다음 학생이 바로 번호를 입력할 수 있게 입력칸으로 돌려 둔다
+      var input = document.getElementById('numInput');
+      if(input) setTimeout(function(){ input.focus(); }, 50);
+    });
+  }
+  renderBoard();
+  _boardTimer = setInterval(boardNext, BOARD_INTERVAL_MS);
+
+  setTimeout(autoTick, 2000);
+  setInterval(autoTick, 30000);
 });

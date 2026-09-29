@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>삼성영어 셀레나 출결 데스크탑 — Acad-atd-03_1.4</title>
+<title>삼성영어 셀레나 출결 데스크탑 — Acad-atd-03_1.5</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="css/style.css">
@@ -40,7 +40,7 @@
       </button>
     </div>
     <div class="side-footer">
-      Desktop Edition v1.4
+      Desktop Edition v1.5
     </div>
   </nav>
 
@@ -94,6 +94,17 @@
           <div class="list-scroll">
             <div class="rank3-group" id="rank3Group"></div>
           </div>
+        </div>
+
+        <div class="list-container board-container">
+          <div class="list-header">
+            <div class="list-title">지난주 리포트</div>
+            <select class="board-select" id="boardSelect" aria-label="친구 선택"></select>
+          </div>
+          <div class="list-scroll">
+            <div class="board-card" id="boardCard"></div>
+          </div>
+          <div class="board-dots" id="boardDots"></div>
         </div>
       </div>
     </div>
@@ -218,6 +229,8 @@
         <div class="report-stats" id="reportStats"></div>
         <div class="report-output" id="reportOutput"></div>
 
+        <div class="auto-status" id="autoStatus"></div>
+
         <div class="hist-recent">
           <div class="hist-recent-title">최근 생성한 리포트</div>
           <div class="hist-list" id="reportHistoryList"></div>
@@ -327,6 +340,7 @@
           <div class="record-stat-label">당월 체류(분)</div>
         </div>
       </div>
+      <div class="record-lastweek" id="recLastWeek"></div>
       <div class="record-rank-row">
         <span class="record-rank-label">📅 이번 달 출결 랭킹</span>
         <span class="record-rank-badge" id="recMonthRank">-</span>
