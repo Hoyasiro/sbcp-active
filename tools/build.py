@@ -5,7 +5,8 @@
 만드는 것
   build/SBCP.html      index.html + css + js를 한 파일로 합친 실행 파일 (폴더가 빠져도 깨지지 않도록)
   build/manual.html    docs/사용설명서.md → HTML (설치 후 '사용설명서.html'로 들어감)
-  release/SBCP_Setup_v<버전>.exe   Windows 설치 파일 (NSIS)
+  release/SBCP_Setup_v<버전>.exe   처음 설치용 (설치 마법사, 바로가기 생성)
+  release/SBCP_Update_v<버전>.exe  업데이트용 (이미 설치된 PC에서 프로그램 파일만 교체)
 
 필요한 것: Python 3, `pip install markdown`, NSIS(makensis)
   - Ubuntu: sudo apt install nsis   /  Windows: https://nsis.sourceforge.io
@@ -122,9 +123,14 @@ def main():
     makensis = shutil.which("makensis")
     if not makensis:
         sys.exit("makensis(NSIS)가 없어 설치 파일은 만들지 않았습니다.")
-    subprocess.run([makensis, "-V2", f"-DVERSION={version}", "sbcp.nsi"],
-                   cwd=os.path.join(ROOT, "installer"), check=True)
-    print(f"release/SBCP_Setup_v{version}.exe 생성")
+    # 예전 버전 파일은 지운다 (release 폴더에는 최신 버전만 둔다)
+    for name in os.listdir(RELEASE):
+        if name.startswith(("SBCP_Setup_v", "SBCP_Update_v")) and f"_v{version}." not in name:
+            os.remove(os.path.join(RELEASE, name))
+    for script, out in [("sbcp.nsi", "Setup"), ("sbcp_update.nsi", "Update")]:
+        subprocess.run([makensis, "-V2", f"-DVERSION={version}", script],
+                       cwd=os.path.join(ROOT, "installer"), check=True)
+        print(f"release/SBCP_{out}_v{version}.exe 생성")
 
 
 if __name__ == "__main__":

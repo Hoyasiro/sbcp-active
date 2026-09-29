@@ -8,7 +8,7 @@ Unicode true
 SetCompressor /SOLID lzma
 
 !ifndef VERSION
-  !define VERSION "1.5"
+  !define VERSION "1.6"
 !endif
 !define APPNAME   "삼복출프 출결"
 !define APPKEY    "SBCP"

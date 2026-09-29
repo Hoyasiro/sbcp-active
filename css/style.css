@@ -52,7 +52,7 @@ body::after { content:''; position:fixed; bottom:-150px; left:-150px; width:450p
 .date-chip { padding:8px 16px; border-radius:12px; font-size:14px; font-weight:700; color:var(--navy); background:rgba(235,49,146,.08); border:1px solid rgba(235,49,146,.18); display:flex; align-items:center; }
 
 /* ================= 홈 (출결) 그리드 레이아웃 ================= */
-.home-grid { display:grid; grid-template-columns: 1fr 0.9fr 1.2fr; grid-template-rows: auto 1fr; gap:24px; height:100%; overflow:hidden; }
+.home-grid { display:grid; grid-template-columns: auto minmax(0,0.8fr) minmax(0,1.7fr); grid-template-rows: auto 1fr; gap:24px; height:100%; overflow:hidden; }
 
 /* 1. 상단 입력창 (Full width) */
 .input-area { grid-column:1 / -1; background:var(--surface-glass); backdrop-filter:blur(10px); border-radius:28px; padding:30px 40px; box-shadow:var(--shadow); display:flex; align-items:center; justify-content:space-between; border:1px solid rgba(235,49,146,.15); flex-shrink:0; }
@@ -505,10 +505,28 @@ body, .content-card, .list-container, .input-area,
 /* ================= 지난주 리포트 (보드 · 기록 팝업 · 자동 생성 현황) ================= */
 .board-select { max-width:150px; padding:6px 10px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--navy); font-size:13px; font-weight:700; font-family:'Noto Sans KR',sans-serif; cursor:pointer; outline:none; }
 .board-select:focus { border-color:var(--pink); }
-.board-card { background:var(--surface); border-radius:18px; padding:20px; border:1px solid var(--border); }
-.board-card.fade { animation:lwFade .45s ease; }
+/* 지난주 리포트 보드 — 세 장이 칸 높이를 똑같이 나눠 갖는다 */
+.board-stack { flex:1; min-height:0; display:grid; grid-template-rows:repeat(3, minmax(0,1fr)); gap:12px; }
+.board-card { background:var(--surface); border-radius:16px; padding:14px 18px; border:1px solid var(--border); display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+.board-card.pinned { border:2px solid var(--pink); }
+.board-stack.slide .board-card { animation:lwFade .45s ease both; }
+.board-stack.slide .board-card:nth-child(2) { animation-delay:.06s; }
+.board-stack.slide .board-card:nth-child(3) { animation-delay:.12s; }
+.board-card .lw-who { flex-wrap:wrap; align-items:center; gap:6px 8px; margin-bottom:8px; flex-shrink:0; }
+.board-card .lw-name { font-size:18px; }
+.board-card .lw-stats { margin:0; gap:6px; }
+.board-card .lw-grade { font-size:12px; padding:3px 8px; }
+.board-card .lw-stat { font-size:12px; padding:3px 8px; }
+.board-card .lw-stat b { font-size:14px; }
+.board-card .lw-text { flex:1; min-height:0; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; font-size:14.5px; line-height:1.65; }
+.board-card .lw-pending, .board-card .lw-msg { padding:10px 12px; }
+.board-container .list-header { flex-wrap:nowrap; }
+/* 오늘 출결 현황 — 등원·하원·전체 알약이 한 줄에 꽉 차는 폭까지만 쓰고, 남는 폭은 리포트 보드로 */
+.today-container .list-header { flex-direction:column; align-items:flex-start; gap:10px; }
+.today-container .stat-pills { flex-wrap:nowrap; margin-bottom:0; }
+.board-container .board-dots { flex:1; justify-content:center; padding:0; min-height:0; }
 @keyframes lwFade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
-.board-dots { display:flex; justify-content:center; flex-wrap:wrap; gap:6px; padding-top:12px; min-height:22px; }
+.board-dots { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:6px; }
 .board-dots i { width:7px; height:7px; border-radius:50%; background:var(--border); display:block; }
 .board-dots i.on { background:var(--pink); width:18px; border-radius:4px; }
 .board-count, .board-pin { font-size:12px; font-weight:700; color:var(--text2); }
@@ -549,3 +567,8 @@ body, .content-card, .list-container, .input-area,
 .key-actions > button { flex:1; margin:0; }
 .backup-info { font-size:13px; font-weight:700; padding:10px 14px; border-radius:12px; margin-bottom:14px; background:var(--teal-light); color:#0e7490; }
 .backup-info.late { background:var(--orange-light); color:#c2410c; }
+
+@media (max-width: 768px) {
+  .board-stack { grid-template-rows:none; }
+  .board-card .lw-text { display:block; -webkit-line-clamp:unset !important; }
+}

@@ -1,5 +1,5 @@
-// [v1.5 업데이트] 앱 버전 — 지난주 리포트 자동 생성·보드
-var APP_VERSION = 'Acad-atd-03_1.5 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
+// [v1.6 업데이트] 앱 버전 — 지난주 리포트 보드 3명 동시 표시, 업데이트 파일 지원
+var APP_VERSION = 'Acad-atd-03_1.6 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
 var STORAGE_KEY = 'acad-atd-03_1.4';
 
 var DEF_SETTINGS = { academyName:'삼성영어 셀레나', phone:'' };
@@ -1612,6 +1612,7 @@ function lastWeekHtml(sid, inPopup){
     ? '<div class="lw-title">📋 지난주 나의 리포트 <span class="lw-period">' + period + '</span></div>'
     : '<div class="lw-who"><span class="lw-name">' + s.name + '</span>'
       + '<span class="lw-level">' + (s.level || '') + '</span>'
+      + (inPopup || st.present === 0 || st.totalDays === 0 ? '' : '@@STATS@@')
       + '<span class="lw-period">' + period + '</span></div>';
 
   // 한 주 전체 휴원 (운영일 0일)
@@ -1636,6 +1637,8 @@ function lastWeekHtml(sid, inPopup){
     : '<div class="lw-pending">AI 한마디는 준비 중이에요. '
       + (inPopup ? '다음 등원 때 확인할 수 있어요!' : '오후 1시 30분 이후 공개됩니다.') + '</div>';
 
+  // 보드에서는 통계를 이름 줄에 붙여 한 줄로 만든다 (카드 높이를 AI 문장에 양보)
+  if(!inPopup) return head.replace('@@STATS@@', stats) + text;
   return head + stats + text;
 }
 
@@ -1667,42 +1670,88 @@ function fillBoardSelect(){
   if(sel.value !== cur) sel.value = '';
 }
 
+var BOARD_SLOTS = 3;   // 한 번에 보여 주는 리포트 수 (1920×1080 기준 세 명이 한 칸에 꽉 차게)
+
+// 카드 높이에 맞춰 AI 문장 글자 크기를 정한다 (1920×1080에서 세 장이 꽉 차 보이도록).
+// 세 장 모두 들어가는 가장 큰 크기를 공통으로 쓰고, 최소 크기로도 넘치면 "…"로 줄인다.
+// 화면 크기·문장 길이마다 달라서 CSS 고정값 대신 실제 높이로 계산한다.
+var BOARD_FONT_MAX = 21, BOARD_FONT_MIN = 13;
+function fitBoardText(){
+  var els = Array.prototype.slice.call(document.querySelectorAll('#boardCard .board-card .lw-text'));
+  if(!els.length || window.innerWidth <= 768) return;
+
+  els.forEach(function(el){ el.style.webkitLineClamp = 'unset'; el.style.display = 'block'; });
+  var size = BOARD_FONT_MAX;
+  for(; size > BOARD_FONT_MIN; size -= 0.5){
+    els.forEach(function(el){ el.style.fontSize = size + 'px'; });
+    if(els.every(function(el){ return el.scrollHeight <= el.clientHeight + 1; })) break;
+  }
+  els.forEach(function(el){
+    el.style.fontSize = size + 'px';
+    el.style.display = '';
+    var lh = parseFloat(getComputedStyle(el).lineHeight) || size * 1.65;
+    el.style.webkitLineClamp = String(Math.max(1, Math.floor((el.clientHeight + 1) / lh)));
+  });
+}
+
 function renderBoard(){
-  var card = document.getElementById('boardCard');
+  var stack = document.getElementById('boardCard');
   var dots = document.getElementById('boardDots');
-  if(!card) return;
+  if(!stack) return;
   fillBoardSelect();
 
-  if(_boardPinned){
-    card.innerHTML = lastWeekHtml(_boardPinned, false);
-    if(dots) dots.innerHTML = '<span class="board-pin">📌 선택한 친구 보기 · 잠시 후 순환으로 돌아갑니다</span>';
-    return;
-  }
-
   var list = boardRotation();
-  if(!list.length){
-    var noDays = weekDays(lastWeekMonday()).length === 0;
-    card.innerHTML = '<div class="lw-msg">' + (noDays
-      ? '지난주는 전체 휴원이었어요. 이번 주 기록이 다음 주 보드에 올라옵니다!'
-      : '아직 보드에 올릴 지난주 기록이 없어요.') + '</div>';
-    if(dots) dots.innerHTML = '';
-    return;
+  var shown = [];
+
+  if(_boardPinned){
+    // 고른 친구를 맨 위에, 그 뒤로 순서상 다음 친구들을 채운다
+    shown.push(_boardPinned);
+    var start = list.findIndex(function(s){ return s.id === _boardPinned; });
+    for(var k = 1; shown.length < BOARD_SLOTS && k <= list.length; k++){
+      var nx = list[((start < 0 ? -1 : start) + k + list.length) % list.length];
+      if(nx && shown.indexOf(nx.id) < 0) shown.push(nx.id);
+    }
+  } else {
+    if(!list.length){
+      var noDays = weekDays(lastWeekMonday()).length === 0;
+      stack.innerHTML = '<div class="lw-msg">' + (noDays
+        ? '지난주는 전체 휴원이었어요. 이번 주 기록이 다음 주 보드에 올라옵니다!'
+        : '아직 보드에 올릴 지난주 기록이 없어요.') + '</div>';
+      if(dots) dots.innerHTML = '';
+      return;
+    }
+    _boardIdx = _boardIdx % list.length;
+    for(var j = 0; j < Math.min(BOARD_SLOTS, list.length); j++){
+      shown.push(list[(_boardIdx + j) % list.length].id);
+    }
   }
 
-  _boardIdx = _boardIdx % list.length;
-  card.innerHTML = lastWeekHtml(list[_boardIdx].id, false);
-  card.classList.remove('fade'); void card.offsetWidth; card.classList.add('fade');
-  if(dots){
-    dots.innerHTML = list.length > 12
-      ? '<span class="board-count">' + (_boardIdx + 1) + ' / ' + list.length + '</span>'
-      : list.map(function(_, i){ return '<i class="' + (i === _boardIdx ? 'on' : '') + '"></i>'; }).join('');
+  stack.innerHTML = shown.map(function(sid, i){
+    return '<div class="board-card' + (_boardPinned && i === 0 ? ' pinned' : '') + '">' + lastWeekHtml(sid, false) + '</div>';
+  }).join('');
+  stack.classList.remove('slide'); void stack.offsetWidth; stack.classList.add('slide');
+  fitBoardText();
+
+  if(!dots) return;
+  if(_boardPinned){
+    dots.innerHTML = '<span class="board-pin">📌 선택한 친구 · 잠시 후 순환</span>';
+  } else if(list.length <= BOARD_SLOTS){
+    dots.innerHTML = '';
+  } else if(list.length > 12){
+    dots.innerHTML = '<span class="board-count">' + (_boardIdx + 1) + ' / ' + list.length + '</span>';
+  } else {
+    var on = shown.map(function(sid){ return list.findIndex(function(s){ return s.id === sid; }); });
+    dots.innerHTML = list.map(function(_, i){ return '<i class="' + (on.indexOf(i) > -1 ? 'on' : '') + '"></i>'; }).join('');
   }
 }
+
+window.addEventListener('resize', function(){ clearTimeout(window._fitT); window._fitT = setTimeout(fitBoardText, 150); });
 
 function boardNext(){
   if(_boardPinned) return;
   var home = document.getElementById('screen-home');
   if(home && !home.classList.contains('active')) return;   // 다른 화면에서는 돌리지 않는다
+  if(boardRotation().length <= BOARD_SLOTS) return;          // 모두 한 화면에 보이면 돌릴 필요 없음
   _boardIdx++;
   renderBoard();
 }
@@ -1820,5 +1869,21 @@ document.addEventListener('DOMContentLoaded', function(){
     setTimeout(function(){
       showToast('💾 ' + (d === null ? '아직 백업한 적이 없습니다.' : '마지막 백업이 ' + d + '일 전입니다.') + ' 데이터 관리에서 백업해 주세요.');
     }, 1500);
+  }
+});
+
+
+// ===== 업데이트 확인 알림 =====
+// 업데이트 파일(SBCP_Update_*.exe)은 프로그램 파일만 바꾼다.
+// 새 버전으로 처음 열렸을 때 한 번만 알려 주어, 업데이트가 적용됐는지 눈으로 확인할 수 있게 한다.
+var LAST_VERSION_KEY = 'acad-last-version';
+var WHATS_NEW = '출결 데스크 지난주 리포트가 3명씩 보이도록 바뀌었습니다.';
+
+document.addEventListener('DOMContentLoaded', function(){
+  var prev = null;
+  try { prev = localStorage.getItem(LAST_VERSION_KEY); localStorage.setItem(LAST_VERSION_KEY, APP_VERSION); } catch(e){ return; }
+  if(prev && prev !== APP_VERSION){
+    var v = (APP_VERSION.match(/_(\d+\.\d+)/) || [])[1];
+    setTimeout(function(){ showToast('✅ v' + v + ' 업데이트가 적용되었습니다. ' + WHATS_NEW); }, 2500);
   }
 });

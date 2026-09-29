@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>삼성영어 셀레나 출결 데스크탑 — Acad-atd-03_1.5</title>
+<title>삼성영어 셀레나 출결 데스크탑 — Acad-atd-03_1.6</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="css/style.css">
@@ -35,7 +35,7 @@
       </button>
     </div>
     <div class="side-footer">
-      Desktop Edition v1.5
+      Desktop Edition v1.6
     </div>
   </nav>
 
@@ -71,7 +71,7 @@
           </div>
         </div>
 
-        <div class="list-container">
+        <div class="list-container today-container">
           <div class="list-header">
             <div class="list-title">오늘 출결 현황</div>
             <div class="stat-pills" id="statPills"></div>
@@ -94,12 +94,10 @@
         <div class="list-container board-container">
           <div class="list-header">
             <div class="list-title">지난주 리포트</div>
+            <div class="board-dots" id="boardDots"></div>
             <select class="board-select" id="boardSelect" aria-label="친구 선택"></select>
           </div>
-          <div class="list-scroll">
-            <div class="board-card" id="boardCard"></div>
-          </div>
-          <div class="board-dots" id="boardDots"></div>
+          <div class="board-stack" id="boardCard"></div>
         </div>
       </div>
     </div>
