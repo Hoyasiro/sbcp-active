@@ -12,7 +12,7 @@ try {
 } catch(e){}
 if(!DB.holidays) DB.holidays = [];   // 기존 저장 데이터에는 holidays가 없으므로 보정
 ensureWeekly();                        // 지난주 리포트 저장소도 같은 방식으로 보정
-function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(DB)); }catch(e){} }
+function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(DB)); return true; }catch(e){ console.error('저장 실패:', e); return false; } }
 
 if(!DB.students.length){
   DB.students=[
@@ -524,12 +524,14 @@ function dlRanking(){
 
 // ===== 데이터 관리 (JSON 백업 / 복구) =====
 function exportBackup() {
-  var dataStr = JSON.stringify(DB);
-  var blob = new Blob([dataStr], {type: "application/json;charset=utf-8;"});
+  // 백업 시각·버전을 함께 넣어 두면 복구할 때 "어느 시점 파일인지" 확인할 수 있다
+  var out = Object.assign({}, DB, { backupAt: fmtDate(new Date()) + ' ' + nowT(), appVersion: APP_VERSION });
+  var blob = new Blob([JSON.stringify(out)], {type: "application/json;charset=utf-8;"});
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = "acad_backup.json";
+  // 날짜를 파일명에 넣는다. 같은 이름이면 브라우저가 "(1)"을 붙여 옛 파일을 고르기 쉬웠다
+  a.download = "acad_backup_" + today() + ".json";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -537,32 +539,79 @@ function exportBackup() {
   showToast('💾 데이터 백업 파일이 다운로드되었습니다.');
 }
 
+// 복구 파일 검사. 문제가 있으면 원인을 한국어 문장으로, 없으면 null을 준다
+function validateBackup(obj){
+  if(!obj || typeof obj !== 'object' || Array.isArray(obj)) return '백업 파일의 내용이 비어 있거나 형식이 다릅니다.';
+  if(!Array.isArray(obj.students)) return '학생 명단(students)이 없습니다. 이 프로그램에서 만든 백업 파일이 맞는지 확인해 주세요.';
+  if(!obj.attendance || typeof obj.attendance !== 'object' || Array.isArray(obj.attendance)) return '출결 기록(attendance)이 없습니다. 이 프로그램에서 만든 백업 파일이 맞는지 확인해 주세요.';
+  for(var i = 0; i < obj.students.length; i++){
+    var st = obj.students[i];
+    if(!st || st.id == null || !st.no || !st.name) return (i+1) + '번째 학생 정보가 손상되었습니다 (번호·이름 누락).';
+  }
+  return null;
+}
+
 function importBackup(event) {
-  var file = event.target.files[0];
-  if(!file) return;
-  
-  if(!confirm("경고: 기존 출결 및 학생 데이터가 모두 삭제되고, 업로드한 파일의 데이터로 덮어쓰기 됩니다. 진행하시겠습니까?")) {
-    event.target.value = ''; // 초기화
-    return;
+  var inputEl = event.target;
+  var file = inputEl.files[0];
+  // 어떤 경우든 선택을 비워 둔다. 비우지 않으면 실패 후 같은 파일을 다시 골라도 반응하지 않는다
+  var done = function(){ inputEl.value = ''; };
+  if(!file){ done(); return; }
+
+  if(!/\.json$/i.test(file.name)){
+    alert('❌ JSON 백업 파일(.json)만 불러올 수 있습니다.\n선택한 파일: ' + file.name
+      + '\n\n※ CSV(엑셀) 파일은 열람용이라 복구에 쓸 수 없습니다.');
+    done(); return;
   }
 
   var reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      var newDB = JSON.parse(e.target.result);
-      if(newDB && newDB.students && newDB.attendance) {
-        DB = newDB;
-        save();
-        alert('✅ 데이터 복구가 성공적으로 완료되었습니다.\n새로고침을 진행합니다.');
-        location.reload();
-      } else {
-        alert('❌ 올바르지 않은 백업 파일 형식입니다.');
-      }
-    } catch(err) {
-      alert('❌ 파일 읽기 오류가 발생했습니다.');
-    }
+  reader.onerror = function(){
+    alert('❌ 파일을 읽지 못했습니다. 파일을 바탕화면 등으로 옮긴 뒤 다시 시도해 주세요.');
+    done();
   };
-  reader.readAsText(file);
+  reader.onload = function(e) {
+    var newDB;
+    try {
+      // 메모장 등으로 열었다 저장하면 맨 앞에 BOM 문자가 붙을 수 있어 제거한다
+      newDB = JSON.parse(String(e.target.result).replace(/^﻿/, ''));
+    } catch(err) {
+      alert('❌ 백업 파일 내용이 손상되었습니다 (JSON 형식 오류).\n\n'
+        + '• 백업 파일을 메모장·엑셀로 열어 수정·저장하지 않았는지 확인해 주세요.\n'
+        + '• 다운로드가 중간에 끊긴 파일일 수 있습니다. 다른 백업 파일로 시도해 주세요.');
+      done(); return;
+    }
+
+    var problem = validateBackup(newDB);
+    if(problem){ alert('❌ 올바른 백업 파일이 아닙니다.\n\n' + problem); done(); return; }
+
+    // 무엇으로 덮어쓰는지 보여 주고 확인받는다
+    var days = Object.keys(newDB.attendance).sort();
+    var summary = '불러올 백업 파일: ' + file.name
+      + (newDB.backupAt ? '\n백업 시각: ' + newDB.backupAt : '')
+      + '\n학생: ' + newDB.students.length + '명'
+      + '\n출결 기록: ' + days.length + '일' + (days.length ? ' (' + days[0] + ' ~ ' + days[days.length-1] + ')' : '')
+      + '\n\n현재 데이터(학생 ' + DB.students.length + '명, 출결 ' + Object.keys(DB.attendance).length + '일)는 '
+      + '이 파일의 내용으로 모두 바뀝니다. 진행하시겠습니까?';
+    if(!confirm(summary)){ done(); return; }
+
+    // 만일을 위해 덮어쓰기 직전 데이터를 따로 한 벌 남겨 둔다
+    try { localStorage.setItem(STORAGE_KEY + '-before-restore', JSON.stringify(DB)); } catch(err){}
+
+    delete newDB.backupAt; delete newDB.appVersion;
+    var prev = DB;
+    DB = newDB;
+    if(!save()){
+      DB = prev;
+      alert('❌ 브라우저 저장 공간에 기록하지 못했습니다.\n\n'
+        + '• 시크릿(비공개) 창에서는 복구가 유지되지 않습니다. 일반 창에서 다시 시도해 주세요.\n'
+        + '• 브라우저 저장 공간이 부족할 수 있습니다.');
+      done(); return;
+    }
+    done();
+    alert('✅ 데이터 복구가 완료되었습니다. (학생 ' + DB.students.length + '명, 출결 ' + days.length + '일)\n새로고침을 진행합니다.');
+    location.reload();
+  };
+  reader.readAsText(file, 'utf-8');
 }
 
 // ===== 설정 =====
