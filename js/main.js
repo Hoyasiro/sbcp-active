@@ -186,8 +186,8 @@ function goTab(n){
     setTimeout(function(){document.getElementById('numInput').focus();},100);
   }
   if(n==='students') renderStudents();
-  if(n==='settings') loadSettings();
-  if(n==='data') renderReportHistory('dataHistoryList', 50);
+  if(n==='settings'){ loadSettings(); renderKeyStatus(); }
+  if(n==='data'){ renderReportHistory('dataHistoryList', 50); renderBackupInfo(); }
   if(n==='report'){ fillStudentSelect(); renderReportHistory('reportHistoryList', 5); renderAutoStatus(); }
 }
 
@@ -536,6 +536,8 @@ function exportBackup() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  try { localStorage.setItem(LAST_BACKUP_KEY, String(Date.now())); } catch(e){}
+  renderBackupInfo();
   showToast('💾 데이터 백업 파일이 다운로드되었습니다.');
 }
 
@@ -1214,14 +1216,111 @@ function buildReportData(st){
   return lines.join('\n');
 }
 
-// API 호출 (지침 9-2의 3분할 중 '호출' 담당)
-async function callReportApi(data, tone){
-  var res = await fetch('/api/report', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: data, tone: tone })
+// ===== AI 호출 (Gemini 직접 호출) =====
+// 서버 없이 이 HTML 파일에서 바로 Gemini를 부른다. (로컬 PC 전용 운영)
+// Gemini는 로컬 파일(file://)에서 오는 요청도 허용한다.
+//
+// 키는 설정 화면에서 한 번 등록하며, 출결 DB와 분리된 저장소에 둔다.
+// → JSON 백업 파일에 키가 섞여 나가지 않는다.
+
+var GEMINI_URL     = 'https://generativelanguage.googleapis.com/v1beta/interactions';
+var GEMINI_MODEL   = 'models/gemini-3-flash-preview';
+var GEMINI_TIMEOUT = 25000;
+var GEMINI_KEY_STORE = 'acad-gemini-key';
+
+// 판정은 코드가 끝냈다. AI는 문장만 쓴다.
+var REPORT_PROMPTS = {
+  parent: [
+    '너는 학원 원장을 돕는 주간 리포트 작성 조수다.',
+    '주어진 출결 데이터를 3~5문장의 한국어 리포트로 작성한다.',
+    '규칙:',
+    '- 등급은 이미 정해져 있다. 절대 다시 판단하지 마라.',
+    '- 숫자를 지어내지 마라. 주어진 값만 사용한다.',
+    '- 학부모에게 보낼 글이므로 정중하고 따뜻한 톤으로 쓴다.',
+    '- 질책하지 말고, 개선이 필요하면 격려로 마무리한다.',
+    '- 주어진 정보에 없는 이름·사실을 지어내지 마라. 학생 이름은 입력된 값만 그대로 쓴다.'
+  ].join('\n'),
+  student: [
+    '너는 학원 학생에게 이번 주 출결을 알려주는 조수다.',
+    '주어진 출결 데이터를 3~5문장의 한국어 글로 작성한다.',
+    '규칙:',
+    '- 등급은 이미 정해져 있다. 절대 다시 판단하지 마라.',
+    '- 숫자를 지어내지 마라. 주어진 값만 사용한다.',
+    '- 학생 본인이 읽는 글이므로 친근한 말투로 쓴다.',
+    '- 잘한 점을 먼저 말하고, 아쉬운 점은 짧게 덧붙인다.',
+    '- 주어진 정보에 없는 이름·사실을 지어내지 마라. 학생 이름은 입력된 값만 그대로 쓴다.'
+  ].join('\n'),
+  peer: [
+    "너는 학원 출결 게시판에 올라갈 '지난주 출결 한마디'를 쓰는 조수다.",
+    '이 글은 학원 친구들이 서로 돌려 보는 공개 게시물이다.',
+    '주어진 출결 데이터를 2~3문장의 한국어 글로 작성한다.',
+    '규칙:',
+    '- 등급은 이미 정해져 있다. 절대 다시 판단하지 마라.',
+    '- 숫자를 지어내지 마라. 주어진 값만 사용한다.',
+    '- 친구들이 함께 읽으므로 친근한 존댓말(~요)로 쓴다.',
+    '- 잘한 점을 숫자로 구체적으로 칭찬하고, 이번 주 목표를 한 가지 응원으로 제시한다.',
+    '- 다른 학생과 비교하거나 질책·망신을 주는 표현은 절대 쓰지 마라.',
+    '- 주어진 정보에 없는 이름·사실을 지어내지 마라. 학생 이름은 입력된 값만 그대로 쓴다.'
+  ].join('\n')
+};
+
+function getGeminiKey(){
+  try { return (localStorage.getItem(GEMINI_KEY_STORE) || '').trim(); } catch(e){ return ''; }
+}
+
+// steps 배열에서 model_output 타입의 텍스트만 뽑는다 (순서가 아니라 type으로 찾는다)
+function extractGeminiText(result){
+  var text = '';
+  (result && result.steps || []).forEach(function(step){
+    if(step.type !== 'model_output') return;
+    (step.content || []).forEach(function(c){ if(c.type === 'text') text += c.text || ''; });
   });
-  return await res.json();
+  return text.trim();
+}
+
+// 성공: {ok:true, text}  /  실패: {ok:false, error:'사용자용 문구'}
+// 인터넷 자체가 끊긴 경우에만 예외를 던진다 (호출하는 쪽에서 "연결 실패"로 처리)
+async function callReportApi(data, tone, keyOverride){
+  var key = keyOverride || getGeminiKey();
+  if(!key) return { ok:false, error:'AI 키가 등록되지 않았습니다. 설정 → AI 연결에서 Gemini API 키를 등록해 주세요.' };
+  if(!data) return { ok:false, error:'출결 데이터가 없습니다.' };
+
+  var ctrl = new AbortController();
+  var timer = setTimeout(function(){ ctrl.abort(); }, GEMINI_TIMEOUT);
+  var res;
+  try {
+    res = await fetch(GEMINI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        model: GEMINI_MODEL,
+        system_instruction: REPORT_PROMPTS[tone] || REPORT_PROMPTS.parent,
+        input: data,
+        generation_config: { thinking_level: 'low' }
+      }),
+      signal: ctrl.signal
+    });
+  } catch(e){
+    if(e && e.name === 'AbortError') return { ok:false, error:'응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.' };
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  // 외부 API의 원문 에러는 화면에 보이지 않는다 (키 일부가 섞여 나올 수 있음). 개발자용으로만 남긴다
+  if(!res.ok){
+    console.error('Gemini HTTP 오류:', res.status);
+    if(res.status === 400 || res.status === 401 || res.status === 403)
+      return { ok:false, error:'AI 키가 올바르지 않거나 사용할 수 없습니다. 설정 → AI 연결에서 키를 확인해 주세요.' };
+    if(res.status === 429)
+      return { ok:false, rateLimited:true, error:'AI 사용량이 많아 잠시 막혔습니다. 잠시 후 다시 시도해 주세요.' };
+    return { ok:false, error:'AI 서버가 혼잡합니다. 잠시 후 다시 시도해 주세요.' };
+  }
+
+  var text = '';
+  try { text = extractGeminiText(await res.json()); } catch(e){}
+  if(!text) return { ok:false, error:'리포트를 생성하지 못했습니다.' };
+  return { ok:true, text:text };
 }
 
 // AI 결과를 화면에 표시 (지침 9-2의 3분할 중 '렌더링' 담당)
@@ -1342,6 +1441,11 @@ var AUTO_SLOTS        = ['13:30', '14:00'];  // 1차 시도, 2차(미생성분 �
 var BOARD_INTERVAL_MS = 4000;
 var BOARD_RESUME_MS   = 20000;
 var WEEKLY_KEEP_WEEKS = 8;                   // 오래된 주차는 자동 정리
+// 무료 키는 분당 호출 수 제한이 있어, 40명을 연달아 부르면 429(사용량 제한)가 난다.
+// 학생 사이에 간격을 두고, 429가 나면 1분 쉬었다가 그 학생을 한 번 더 시도한다.
+var GEN_GAP_MS         = 7000;               // 호출 간격 (분당 최대 약 8회)
+var RATE_LIMIT_WAIT_MS = 60000;
+function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 
 function ensureWeekly(){
   if(!DB.weekly || typeof DB.weekly !== 'object') DB.weekly = {};
@@ -1402,7 +1506,12 @@ async function runWeeklyGeneration(){
     var s = targets[i];
     var st = weeklyStats(s.id, mon);
     try {
+      if(i > 0) await sleep(GEN_GAP_MS);
       var r = await callReportApi(buildReportData(st), 'peer');
+      if(r && r.rateLimited){
+        await sleep(RATE_LIMIT_WAIT_MS);
+        r = await callReportApi(buildReportData(st), 'peer');
+      }
       if(r && r.ok){
         if(!w.reports[mon]) w.reports[mon] = {};
         w.reports[mon][s.id] = { text: r.text, at: fmtDate(new Date()) + ' ' + nowT() };
@@ -1433,6 +1542,8 @@ function autoTick(){
   if(_weeklyRunning) return;
   var td = today();
   if(isWeekend(td)) return;                 // 주말에는 돌리지 않는다
+
+  if(!getGeminiKey()) return;               // 키 등록 전에는 시도하지 않는다 (등록 후 바로 돌 수 있게)
 
   var w = ensureWeekly();
   var thisMon = weekStart();
@@ -1469,6 +1580,7 @@ function renderAutoStatus(){
 
   var stateText;
   if(!days.length)          stateText = '지난주는 전체 휴원이라 생성할 리포트가 없습니다.';
+  else if(!getGeminiKey())  stateText = '⚠️ AI 키가 등록되지 않아 자동 생성이 멈춰 있습니다. 설정 → AI 연결에서 등록해 주세요.';
   else if(_weeklyRunning)   stateText = '생성 중... (' + made + '건 완료, ' + remain + '건 남음)';
   else if(remain === 0)     stateText = '대상 학생 리포트가 모두 준비되었습니다. (' + made + '건)';
   else                      stateText = made + '건 생성 · ' + remain + '건 미생성';
@@ -1480,7 +1592,7 @@ function renderAutoStatus(){
     +   '<div class="auto-slots">' + slotHtml + '</div>'
     + '</div>'
     + '<div class="auto-state">' + stateText + '</div>'
-    + ((remain > 0 && !_weeklyRunning)
+    + ((remain > 0 && !_weeklyRunning && getGeminiKey())
         ? '<button class="auto-now" id="autoNowBtn">미생성분 지금 생성</button>' : '');
 
   var btn = document.getElementById('autoNowBtn');
@@ -1515,7 +1627,7 @@ function lastWeekHtml(sid, inPopup){
       '<div class="lw-stats">'
     +   '<span class="lw-grade grade-' + st.grade + '">' + st.grade + '</span>'
     +   '<span class="lw-stat"><b>' + st.present + '/' + st.totalDays + '</b>일 출석</span>'
-    +   '<span class="lw-stat">🔥 <b>' + st.streak + '</b>일 연속</span>'
+    +   (st.streak > 0 ? '<span class="lw-stat">🔥 <b>' + st.streak + '</b>일 연속</span>' : '')   // 0일 연속은 굳이 드러내지 않는다
     +   '<span class="lw-stat">⏱️ 평균 <b>' + st.avgMinutes + '</b>분</span>'
     + '</div>';
 
@@ -1624,4 +1736,89 @@ document.addEventListener('DOMContentLoaded', function(){
 
   setTimeout(autoTick, 2000);
   setInterval(autoTick, 30000);
+});
+
+
+// ===== 설정: AI 연결 (Gemini API 키) =====
+function maskKey(k){ return k ? ('••••••••' + k.slice(-4)) : ''; }
+
+function renderKeyStatus(){
+  var el = document.getElementById('keyStatus');
+  if(!el) return;
+  var k = getGeminiKey();
+  el.className = 'key-status ' + (k ? 'on' : 'off');
+  el.textContent = k ? ('✅ 등록됨 (' + maskKey(k) + ')') : '⚠️ 등록된 키가 없습니다. AI 문장 없이 통계만 표시됩니다.';
+}
+
+function saveGeminiKey(){
+  var input = document.getElementById('keyInput');
+  var k = (input.value || '').trim().replace(/^["']|["']$/g, '');
+  if(!k){ showToast('키를 붙여 넣어 주세요.'); return; }
+  try { localStorage.setItem(GEMINI_KEY_STORE, k); } catch(e){ showToast('⚠️ 키를 저장하지 못했습니다.'); return; }
+  input.value = '';
+  renderKeyStatus(); renderAutoStatus();
+  showToast('✅ AI 키가 저장되었습니다. [연결 테스트]로 확인해 보세요.');
+  setTimeout(autoTick, 500);   // 오늘 자동 생성 시각이 지났다면 바로 시작
+}
+
+function deleteGeminiKey(){
+  if(!getGeminiKey()) return;
+  if(!confirm('등록된 AI 키를 삭제할까요?')) return;
+  try { localStorage.removeItem(GEMINI_KEY_STORE); } catch(e){}
+  renderKeyStatus(); renderAutoStatus();
+  showToast('AI 키를 삭제했습니다.');
+}
+
+async function testGeminiKey(){
+  var btn = document.getElementById('keyTestBtn');
+  var typed = (document.getElementById('keyInput').value || '').trim();
+  if(!typed && !getGeminiKey()){ showToast('먼저 키를 붙여 넣어 주세요.'); return; }
+  btn.disabled = true; btn.textContent = '확인 중...';
+  try {
+    var r = await callReportApi('학생 이름: 테스트\n출석: 1일 / 1일 (100%)\n등급: 최고', 'student', typed || null);
+    if(r.ok) alert('✅ AI 연결 성공!\n\n받은 문장 예시:\n' + r.text);
+    else alert('❌ AI 연결 실패\n\n' + r.error);
+  } catch(e){
+    alert('❌ 인터넷에 연결되어 있지 않습니다.\n인터넷 연결을 확인한 뒤 다시 시도해 주세요.');
+  } finally {
+    btn.disabled = false; btn.textContent = '연결 테스트';
+  }
+}
+
+// ===== 백업 알림 =====
+// 모든 데이터가 이 PC의 브라우저 안에만 있으므로, 백업 파일이 유일한 안전장치다.
+var LAST_BACKUP_KEY = 'acad-last-backup';
+var BACKUP_REMIND_DAYS = 7;
+
+function daysSinceBackup(){
+  var t = 0;
+  try { t = Number(localStorage.getItem(LAST_BACKUP_KEY)) || 0; } catch(e){}
+  return t ? Math.floor((Date.now() - t) / 86400000) : null;   // null = 한 번도 안 함
+}
+
+function renderBackupInfo(){
+  var el = document.getElementById('backupInfo');
+  if(!el) return;
+  var d = daysSinceBackup();
+  var late = d === null || d >= BACKUP_REMIND_DAYS;
+  el.className = 'backup-info' + (late ? ' late' : '');
+  el.textContent = d === null ? '⚠️ 아직 백업한 적이 없습니다. 지금 한 번 백업해 두세요.'
+    : d === 0 ? '✅ 마지막 백업: 오늘'
+    : (late ? '⚠️ ' : '✅ ') + '마지막 백업: ' + d + '일 전' + (late ? ' — 백업을 권장합니다.' : '');
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  var kSave = document.getElementById('keySaveBtn');   if(kSave) kSave.addEventListener('click', saveGeminiKey);
+  var kTest = document.getElementById('keyTestBtn');   if(kTest) kTest.addEventListener('click', testGeminiKey);
+  var kDel  = document.getElementById('keyDelBtn');    if(kDel)  kDel.addEventListener('click', deleteGeminiKey);
+  renderKeyStatus();
+  renderBackupInfo();
+
+  // 출결 기록이 있는데 백업이 오래됐으면 켤 때 한 번 알려 준다
+  var d = daysSinceBackup();
+  if(Object.keys(DB.attendance).length && (d === null || d >= BACKUP_REMIND_DAYS)){
+    setTimeout(function(){
+      showToast('💾 ' + (d === null ? '아직 백업한 적이 없습니다.' : '마지막 백업이 ' + d + '일 전입니다.') + ' 데이터 관리에서 백업해 주세요.');
+    }, 1500);
+  }
 });

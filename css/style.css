@@ -540,3 +540,12 @@ body, .content-card, .list-container, .input-area,
 .auto-slot.done { background:var(--teal-light); color:#0e7490; }
 .auto-state { font-size:13px; color:var(--text2); margin-top:8px; }
 .auto-now { margin-top:10px; padding:8px 14px; border:none; border-radius:10px; background:var(--navy-solid); color:#fff; font-size:13px; font-weight:700; font-family:'Noto Sans KR',sans-serif; cursor:pointer; }
+
+/* ================= 설정: AI 연결 · 데이터: 백업 상태 ================= */
+.key-status { font-size:13px; font-weight:700; padding:10px 14px; border-radius:12px; margin-bottom:12px; }
+.key-status.on  { background:var(--teal-light); color:#0e7490; }
+.key-status.off { background:var(--orange-light); color:#c2410c; }
+.key-actions { display:flex; gap:8px; margin-top:10px; }
+.key-actions > button { flex:1; margin:0; }
+.backup-info { font-size:13px; font-weight:700; padding:10px 14px; border-radius:12px; margin-bottom:14px; background:var(--teal-light); color:#0e7490; }
+.backup-info.late { background:var(--orange-light); color:#c2410c; }
