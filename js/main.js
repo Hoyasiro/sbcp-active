@@ -68,30 +68,6 @@ function ensureStat(sid){
   return DB.stats[sid];
 }
 
-function recordAttendanceStat(sid, td){
-  var st = ensureStat(sid);
-  if(st.lastAttendDate === td) return st;
-
-  var ym = td.slice(0,7);
-  st.monthly[ym] = (st.monthly[ym]||0) + 1;
-
-  if(attendedOn(sid, prevOperatingDay(td))) st.currentStreak += 1;
-  else st.currentStreak = 1;
-
-  if(st.currentStreak > st.longestStreak) st.longestStreak = st.currentStreak;
-  st.lastAttendDate = td;
-  return st;
-}
-
-function addStayMinutes(sid, td, inTime, outTime){
-  var st = ensureStat(sid);
-  var mins = timeDiffMinutes(inTime, outTime);
-  if(mins < 0) mins = 0;
-  var ym = td.slice(0,7);
-  st.monthlyMinutes[ym] = (st.monthlyMinutes[ym]||0) + mins;
-  return mins;
-}
-
 function timeDiffMinutes(inTime, outTime){
   if(!inTime || !outTime) return 0;
   var a = inTime.split(':'), b = outTime.split(':');
@@ -101,6 +77,8 @@ function timeDiffMinutes(inTime, outTime){
   return diff < 0 ? 0 : diff;
 }
 
+// 학생 한 명의 통계(월간 출석·체류 시간·연속 기록)를 원본 출결에서 다시 만든다.
+// 등원·하원·취소·휴원일 변경 모두 이 함수 하나로 계산해, 규칙이 두 곳에 나뉘어 어긋나는 일이 없게 한다.
 function recalcStatsForStudent(sid){
   var dates = Object.keys(DB.attendance).filter(function(d){ return DB.attendance[d][sid] && DB.attendance[d][sid].inTime; }).sort();
   DB.stats[sid] = {currentStreak:0, longestStreak:0, lastAttendDate:null, monthly:{}, monthlyMinutes:{}};
@@ -258,14 +236,16 @@ function processAttend(no){
   if(!rec){
     DB.attendance[td][s.id]={inTime:time, outTime:null};
     var prevBest = ensureStat(s.id).longestStreak;
-    var st = recordAttendanceStat(s.id, td);
+    recalcStatsForStudent(s.id);
+    var st = DB.stats[s.id];
     isNewBest = st.currentStreak > prevBest && st.currentStreak > 1;
     type  = 'success'; title = s.name+' 등원 처리됨';
     sub = '🔥 연속 '+st.currentStreak+'일 출석 중' + (isNewBest ? ' (신기록!)' : '');
     undoAction = function(){ cancelAttend(s.id, 'all', true); };
   } else if(isOut){
     DB.attendance[td][s.id].outTime=time;
-    var stayMin = addStayMinutes(s.id, td, rec.inTime, time);
+    recalcStatsForStudent(s.id);
+    var stayMin = timeDiffMinutes(rec.inTime, time);
     type  = 'checkout'; title = s.name+' 하원 처리됨'; sub = '오늘 학습 시간: '+stayMin+'분';
     undoAction = function(){ cancelAttend(s.id, 'outTime', true); };
   } else {
@@ -315,19 +295,9 @@ function cancelAttend(sid, field, silent){
   if(!silent && !confirm('해당 기록을 취소하시겠습니까?')) return;
   var td=today();
   if(!DB.attendance[td] || !DB.attendance[td][sid]) return;
-  if(field==='all'){
-    delete DB.attendance[td][sid];
-    recalcStatsForStudent(sid);
-  } else if(field==='outTime'){
-    var rec = DB.attendance[td][sid];
-    if(rec.outTime && rec.inTime){
-      var st = ensureStat(sid);
-      var ym = td.slice(0,7);
-      var mins = timeDiffMinutes(rec.inTime, rec.outTime);
-      if(mins > 0) st.monthlyMinutes[ym] = Math.max(0, (st.monthlyMinutes[ym]||0) - mins);
-    }
-    rec.outTime=null;
-  }
+  if(field==='all') delete DB.attendance[td][sid];
+  else if(field==='outTime') DB.attendance[td][sid].outTime = null;
+  recalcStatsForStudent(sid);
   save(); renderRecent(); renderRank3Group();
   hideUndoToast();
   if(!silent) showToast('✅ 출결 기록이 정상적으로 취소되었습니다.');
@@ -433,7 +403,12 @@ function openAdd(){
   ['mNo','mName','mLevel'].forEach(function(i){document.getElementById(i).value='';});
   document.getElementById('addMov').classList.add('show');
 }
-function closeMov(id){document.getElementById(id).classList.remove('show');}
+function closeMov(id){
+  document.getElementById(id).classList.remove('show');
+  // 등원 팝업을 '확인'으로 닫으면 커서가 버튼에 남아 다음 학생의 번호 입력이 무시됐다 → 출결 데스크면 입력칸으로 돌려 둔다
+  var home = document.getElementById('screen-home');
+  if(home && home.classList.contains('active')) setTimeout(function(){ document.getElementById('numInput').focus(); }, 50);
+}
 
 function addStu(){
   var no=document.getElementById('mNo').value.trim().padStart(2,'0');
@@ -704,6 +679,8 @@ function triggerUndo(){
     _pendingUndoAction();
   }
   hideUndoToast();
+  var input = document.getElementById('numInput');   // 취소 후 바로 다시 입력할 수 있게
+  if(input) setTimeout(function(){ input.focus(); }, 50);
 }
 
 // ===== 대한민국 양력 공휴일 =====
@@ -810,7 +787,7 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 // ===== 주간 출결 집계 =====
-// S1 판정 기준 정의서(A~F)를 코드로 옮긴 부분.
+// 기획서 5절 판정 기준(A~F)을 코드로 옮긴 부분.
 // 여기서 계산한 결과를 AI에게 재료로 넘긴다. 판정은 AI가 하지 않는다.
 
 // 기준일이 속한 주의 월요일을 구한다
@@ -834,7 +811,7 @@ function weekDays(monday){
   return days;
 }
 
-// 출석률로 등급을 판정한다 (S1 정의서 B·E)
+// 출석률로 등급을 판정한다 (기획서 5-B·E)
 function gradeOf(rate){
   if(rate >= 100) return '최고';
   if(rate >= 80)  return '양호';
@@ -859,7 +836,7 @@ function weeklyStats(sid, baseDate){
       if(rec.outTime){
         minutes.push(timeDiffMinutes(rec.inTime, rec.outTime));
       } else {
-        minutes.push(0);   // 하원 미체크는 0분 (S1 결정 D-4)
+        minutes.push(0);   // 하원 미체크는 0분 (기획서 5-D)
         noCheckout++;
       }
     }
@@ -890,16 +867,17 @@ function weeklyStats(sid, baseDate){
 }
 
 // ===== 주간 리포트 화면 =====
-// 지침 9-2에 따라 역할을 나눈다.
+// 역할을 나눠 둔다.
 //   collectReportInput  입력 수집·검증
 //   renderReportStats   집계 결과 렌더링
-//   (다음 단계에서 API 호출 함수 추가)
+//   callReportApi       AI 호출 (아래 'AI 호출' 절)
+//   renderReportText    AI 결과 렌더링
 
 var reportTone = 'parent';   // 현재 선택된 톤
 
 // ===== 리포트 캐시 (2단 구조) =====
 // 같은 학생·같은 집계값·같은 톤이면 AI에게 물어볼 내용이 똑같다.
-// 이미 받아 둔 문장을 재사용해 불필요한 API 호출을 막는다 (제약 C5).
+// 이미 받아 둔 문장을 재사용해 불필요한 API 호출을 막는다 (기획서 6-6).
 //
 //   1단 메모리       — 가장 빠름. 새로고침하면 사라짐
 //   2단 localStorage — 브라우저를 껐다 켜도 남음
@@ -1132,7 +1110,7 @@ function updateReportName(){
   }
 }
 
-// 입력 수집 + 검증 (S1 정의서 F-5)
+// 입력 수집 + 검증 (기획서 5-F)
 function collectReportInput(){
   var input = document.getElementById('reportCode');
   var no = (input.value || '').trim();
@@ -1324,7 +1302,7 @@ async function callReportApi(data, tone, keyOverride){
   return { ok:true, text:text };
 }
 
-// AI 결과를 화면에 표시 (지침 9-2의 3분할 중 '렌더링' 담당)
+// AI 결과를 화면에 표시
 function renderReportText(text){
   var box = document.getElementById('reportOutput');
   box.innerHTML = '<div class="ro-box">' + text + '</div>'
@@ -1345,7 +1323,7 @@ async function generateReport(){
   var st = weeklyStats(input.sid);
   renderReportStats(st);                   // 카드는 항상 지금 입력된 번호의 것으로 맞춘다
 
-  // 이번 주 출결 기록이 0건이면 API를 호출하지 않는다 (S1 정의서 F-1)
+  // 이번 주 출결 기록이 0건이면 API를 호출하지 않는다 (기획서 5-F)
   // 카드(0/5, 0%)는 그대로 두고 안내 문구만 띄운다
   // 한 주 전체가 휴원이면 원인이 다르므로 안내도 따로 한다
   if(st.totalDays === 0){
@@ -1357,7 +1335,7 @@ async function generateReport(){
     return;
   }
 
-    // 이미 같은 조건으로 받아 둔 리포트가 있으면 API를 부르지 않는다 (제약 C5)
+    // 이미 같은 조건으로 받아 둔 리포트가 있으면 API를 부르지 않는다 (기획서 6-6)
   var cacheKey = reportCacheKey(st, input.tone);
   if(reportCache[cacheKey]){
     renderReportText(reportCache[cacheKey]);
@@ -1366,7 +1344,7 @@ async function generateReport(){
   }
 
   // 요청 중에는 버튼과 입력칸을 함께 잠근다
-  // (연타로 인한 중복 호출·과금 방지, 제약 C5 / 대기 중 번호 변경 방지)
+  // (연타로 인한 중복 호출·과금 방지, 기획서 6-6 / 대기 중 번호 변경 방지)
   var btn  = document.getElementById('reportBtn');
   var code = document.getElementById('reportCode');
   btn.disabled  = true;
@@ -1500,7 +1478,6 @@ async function runWeeklyGeneration(){
   var mon = lastWeekMonday();
   var w = ensureWeekly();
   var targets = weeklyTargets();
-  var failed = 0;
 
   // 한 명씩 차례로 호출한다 (동시 호출 시 API 제한·과금 폭주 방지)
   for(var i = 0; i < targets.length; i++){
@@ -1519,12 +1496,10 @@ async function runWeeklyGeneration(){
         save();
         addReportHistory(st, 'peer', r.text);
       } else {
-        failed++;
         console.warn('지난주 리포트 생성 실패:', s.name, r && r.error);
       }
     } catch(e){
       // 네트워크 자체가 안 되면 나머지도 실패하므로 여기서 멈추고 다음 시도에 맡긴다
-      failed += targets.length - i;
       console.error('지난주 리포트 요청 실패:', e);
       break;
     }
@@ -1535,7 +1510,6 @@ async function runWeeklyGeneration(){
   _weeklyRunning = false;
   renderAutoStatus();
   renderBoard();
-  return failed;
 }
 
 // 30초마다 확인. 지난 시각의 슬롯 중 아직 시도하지 않은 것을 하나씩 실행한다

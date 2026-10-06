@@ -209,7 +209,7 @@ body::after { content:''; position:fixed; bottom:-150px; left:-150px; width:450p
 .mk { background:linear-gradient(135deg,var(--pink),#c0157a); color:var(--white); box-shadow:0 4px 12px rgba(235,49,146,.3); }
 
 /* 개인 기록 팝업 */
-.record-card { background:var(--surface); border-radius:28px; padding:0; width:100%; max-width:420px; overflow:hidden; }
+.record-card { background:var(--surface); border-radius:28px; padding:0; width:100%; max-width:420px; max-height:calc(92vh / var(--ui-zoom, 1)); overflow-x:hidden; overflow-y:auto; }
 .record-hero { background:linear-gradient(135deg,var(--navy-solid),#1a1a8a); padding:32px 24px 24px; text-align:center; position:relative; overflow:hidden; }
 .record-hero::before { content:''; position:absolute; top:-40px; right:-40px; width:160px; height:160px; border-radius:50%; background:radial-gradient(circle,rgba(255,233,51,.18),transparent 70%); }
 .record-emoji { font-size:48px; margin-bottom:10px; }
@@ -334,9 +334,6 @@ body::after { content:''; position:fixed; bottom:-150px; left:-150px; width:450p
   .tone-btn { padding:0 8px; font-size:13px; }
   .report-btn { width:100%; }
 
-  /* 탭이 5개가 되어 글자가 좁아지므로 축소 */
-  .side-item { font-size:10px; padding:8px 2px; }
-  .side-item svg { width:20px; height:20px; }
 
   /* 세로 배치 + 스크롤 허용 */
   body { height:auto; min-height:100vh; overflow-y:auto; display:block; }
@@ -368,7 +365,7 @@ body::after { content:''; position:fixed; bottom:-150px; left:-150px; width:450p
   }
   .side-item svg { width:22px; height:22px; }
 
-    /* ---- 홈: 2열 그리드 → 1열 ---- */
+  /* ---- 홈: 3열 그리드 → 1열 ---- */
   .home-grid { grid-template-columns:1fr; grid-template-rows:auto; height:auto; overflow:visible; gap:16px; }
   .list-container { overflow:visible; }
   .list-scroll { overflow:visible; padding-right:0; }
@@ -377,7 +374,6 @@ body::after { content:''; position:fixed; bottom:-150px; left:-150px; width:450p
   .input-area { flex-direction:column; gap:24px; padding:55px 20px; }
   .input-left { flex-direction:column; text-align:center; gap:14px; }
   .attend-icon { width:64px; height:64px; font-size:28px; }
-  .attend-text h3 { font-size:20px; }
   .num-input { width:100%; max-width:280px; font-size:64px; letter-spacing:16px; }
   .num-input::placeholder { letter-spacing:16px; }
   .result-wrapper { width:100%; height:auto; justify-content:center; }
@@ -524,7 +520,6 @@ body, .content-card, .list-container, .input-area,
 /* 오늘 출결 현황 — 등원·하원·전체 알약이 한 줄에 꽉 차는 폭까지만 쓰고, 남는 폭은 리포트 보드로 */
 .today-container .list-header { flex-direction:column; align-items:flex-start; gap:10px; }
 .today-container .stat-pills { flex-wrap:nowrap; margin-bottom:0; }
-.board-container .board-dots { flex:1; justify-content:center; padding:0; min-height:0; }
 @keyframes lwFade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
 .board-dots { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:6px; }
 .board-dots i { width:7px; height:7px; border-radius:50%; background:var(--border); display:block; }
@@ -543,7 +538,6 @@ body, .content-card, .list-container, .input-area,
 .lw-text { font-size:14px; line-height:1.7; color:var(--text); }
 .lw-pending, .lw-msg { font-size:13px; line-height:1.6; color:var(--text2); background:var(--gray); border-radius:12px; padding:12px 14px; }
 
-.record-card { max-height:calc(92vh / var(--ui-zoom, 1)); overflow-y:auto; }
 .record-lastweek { background:var(--gray); border-radius:16px; padding:16px; margin-bottom:14px; }
 .record-lastweek .lw-stat { background:var(--surface); }
 .record-lastweek .lw-text { font-size:13px; }
@@ -599,7 +593,6 @@ body, .content-card, .list-container, .input-area,
 .bn-btn:hover { border-color:var(--pink); color:var(--pink); }
 .bn-play { width:auto; min-width:44px; padding:0 10px; margin-left:6px; font-size:12px; }
 .bn-play.paused { background:var(--pink); border-color:var(--pink); color:#fff; }
-.board-container .board-nav .board-dots { flex:0 1 auto; }
 
 /* ================= 설정 화면: 3열 균형 배치 ================= */
 /* 기본(학원 정보·AI) / 화면(화면 설정·테마) / 출결 기준(휴원일·연속 출결) — 관련 있는 것끼리 한 열에 묶는다 */
