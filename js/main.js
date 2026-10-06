@@ -1,5 +1,5 @@
-// [v1.4 업데이트] 앱 버전 
-var APP_VERSION = 'Acad-atd-03_1.4 (Desktop)';
+// [v1.7 업데이트] 앱 버전 — 사이드바 숨기기, 화면 자동 맞춤, 시작 시 전체 화면, 보드 일시정지·화살표
+var APP_VERSION = 'Acad-atd-03_1.7 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
 var STORAGE_KEY = 'acad-atd-03_1.4';
 
 var DEF_SETTINGS = { academyName:'삼성영어 셀레나', phone:'' };
@@ -11,7 +11,8 @@ try {
   if(_s) DB=Object.assign({students:[],attendance:{},stats:{},holidays:[],settings:Object.assign({},DEF_SETTINGS)}, JSON.parse(_s)); 
 } catch(e){}
 if(!DB.holidays) DB.holidays = [];   // 기존 저장 데이터에는 holidays가 없으므로 보정
-function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(DB)); }catch(e){} }
+ensureWeekly();                        // 지난주 리포트 저장소도 같은 방식으로 보정
+function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(DB)); return true; }catch(e){ console.error('저장 실패:', e); return false; } }
 
 if(!DB.students.length){
   DB.students=[
@@ -35,15 +36,29 @@ function fmtPhone(el){
   else el.value=v.slice(0,3)+'-'+v.slice(3,7)+'-'+v.slice(7,11);
 }
 
-// ===== 주말 제외 연속 출결 계산 =====
-function prevWeekday(dateStr){
-  var d = new Date(dateStr + 'T00:00:00');
-  do { d.setDate(d.getDate() - 1); } while (d.getDay() === 0 || d.getDay() === 6);
-  return fmtDate(d);
-}
+// ===== 연속 출결 계산 (주말·휴원일 제외) =====
+// 운영일 = 월~금 중 휴원일이 아닌 날. 연속은 "직전 운영일에도 출석했는가"로 판단한다.
+// 금요일 다음 월요일, 휴원일 앞뒤 운영일은 연속으로 이어진다.
 function isWeekend(dateStr){
   var d = new Date(dateStr + 'T00:00:00');
   return d.getDay() === 0 || d.getDay() === 6;
+}
+function isOperatingDay(dateStr){
+  return !isWeekend(dateStr) && !isHoliday(dateStr);
+}
+function prevOperatingDay(dateStr){
+  var d = new Date(dateStr + 'T00:00:00');
+  // 긴 연휴를 감안해도 60일이면 충분하다 (휴원일이 잘못 대량 등록된 경우의 무한 루프 방지)
+  for(var i = 0; i < 60; i++){
+    d.setDate(d.getDate() - 1);
+    var ds = fmtDate(d);
+    if(isOperatingDay(ds)) return ds;
+  }
+  return fmtDate(d);
+}
+function attendedOn(sid, dateStr){
+  var rec = DB.attendance[dateStr] && DB.attendance[dateStr][sid];
+  return !!(rec && rec.inTime);
 }
 
 function ensureStat(sid){
@@ -51,31 +66,6 @@ function ensureStat(sid){
   if(!DB.stats[sid].monthly) DB.stats[sid].monthly = {};
   if(!DB.stats[sid].monthlyMinutes) DB.stats[sid].monthlyMinutes = {};
   return DB.stats[sid];
-}
-
-function recordAttendanceStat(sid, td){
-  var st = ensureStat(sid);
-  if(st.lastAttendDate === td) return st;
-
-  var ym = td.slice(0,7);
-  st.monthly[ym] = (st.monthly[ym]||0) + 1;
-
-  var expectedPrev = prevWeekday(td);
-  if(st.lastAttendDate === expectedPrev) st.currentStreak += 1;
-  else st.currentStreak = 1;
-
-  if(st.currentStreak > st.longestStreak) st.longestStreak = st.currentStreak;
-  st.lastAttendDate = td;
-  return st;
-}
-
-function addStayMinutes(sid, td, inTime, outTime){
-  var st = ensureStat(sid);
-  var mins = timeDiffMinutes(inTime, outTime);
-  if(mins < 0) mins = 0;
-  var ym = td.slice(0,7);
-  st.monthlyMinutes[ym] = (st.monthlyMinutes[ym]||0) + mins;
-  return mins;
 }
 
 function timeDiffMinutes(inTime, outTime){
@@ -87,6 +77,8 @@ function timeDiffMinutes(inTime, outTime){
   return diff < 0 ? 0 : diff;
 }
 
+// 학생 한 명의 통계(월간 출석·체류 시간·연속 기록)를 원본 출결에서 다시 만든다.
+// 등원·하원·취소·휴원일 변경 모두 이 함수 하나로 계산해, 규칙이 두 곳에 나뉘어 어긋나는 일이 없게 한다.
 function recalcStatsForStudent(sid){
   var dates = Object.keys(DB.attendance).filter(function(d){ return DB.attendance[d][sid] && DB.attendance[d][sid].inTime; }).sort();
   DB.stats[sid] = {currentStreak:0, longestStreak:0, lastAttendDate:null, monthly:{}, monthlyMinutes:{}};
@@ -94,8 +86,7 @@ function recalcStatsForStudent(sid){
   dates.forEach(function(td){
     var ym = td.slice(0,7);
     st.monthly[ym] = (st.monthly[ym]||0) + 1;
-    var expectedPrev = prevWeekday(td);
-    if(st.lastAttendDate === expectedPrev) st.currentStreak += 1;
+    if(attendedOn(sid, prevOperatingDay(td))) st.currentStreak += 1;
     else st.currentStreak = 1;
     if(st.currentStreak > st.longestStreak) st.longestStreak = st.currentStreak;
     st.lastAttendDate = td;
@@ -113,10 +104,26 @@ function liveStreak(sid){
   if(!st || !st.lastAttendDate) return 0;
   var td = today();
   if(st.lastAttendDate === td) return st.currentStreak;
-  var checkDate = isWeekend(td) ? td : td;
-  var expectedPrev = prevWeekday(checkDate);
-  if(st.lastAttendDate >= expectedPrev) return st.currentStreak;
+  // 오늘 아직 안 왔어도 직전 운영일까지 이어졌다면 연속은 살아 있다
+  if(st.lastAttendDate >= prevOperatingDay(td)) return st.currentStreak;
   return 0;
+}
+
+// 특정 날짜(보통 지난주 마지막 운영일) 기준의 연속 출석.
+// 지난주 리포트는 "지난주가 끝났을 때"의 연속 기록을 써야 하므로 liveStreak와 따로 둔다.
+function streakEndingAt(sid, dateStr){
+  var d = isOperatingDay(dateStr) ? dateStr : prevOperatingDay(dateStr);
+  var cnt = 0;
+  for(var i = 0; i < 400 && attendedOn(sid, d); i++){
+    cnt++;
+    d = prevOperatingDay(d);
+  }
+  return cnt;
+}
+
+// 휴원일이 바뀌면 과거 연속 기록도 달라지므로 전원 다시 계산한다
+function recalcAllStats(){
+  DB.students.forEach(function(s){ recalcStatsForStudent(s.id); });
 }
 
 // ===== 랭킹 계산 =====
@@ -147,19 +154,20 @@ function medalEmoji(i){
 
 // ===== 탭 이동 (사이드바) =====
 function goTab(n){
+  document.body.classList.remove('sidebar-open');   // 숨김 모드에서 펼친 메뉴는 고르는 즉시 닫는다
   document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
   document.querySelectorAll('.side-item').forEach(function(t){t.classList.remove('active');});
   document.getElementById('screen-'+n).classList.add('active');
   document.getElementById('tab-'+n).classList.add('active');
   
   if(n==='home'){
-    renderRecent(); renderRank3Group();
+    renderRecent(); renderRank3Group(); renderBoard();
     setTimeout(function(){document.getElementById('numInput').focus();},100);
   }
   if(n==='students') renderStudents();
-  if(n==='settings') loadSettings();
-  if(n==='data') renderReportHistory('dataHistoryList', 50);
-  if(n==='report'){ fillStudentSelect(); renderReportHistory('reportHistoryList', 5); }
+  if(n==='settings'){ loadSettings(); renderKeyStatus(); renderUiSettings(); }
+  if(n==='data'){ renderReportHistory('dataHistoryList', 50); renderBackupInfo(); }
+  if(n==='report'){ fillStudentSelect(); renderReportHistory('reportHistoryList', 5); renderAutoStatus(); }
 }
 
 // ===== 출결 입력 처리 =====
@@ -175,6 +183,9 @@ function showResult(type, title, sub){
 }
 
 document.addEventListener('DOMContentLoaded', function(){
+  // 저장된 요약(stats)이 이전 규칙(주말만 제외)으로 계산돼 있을 수 있으므로 시작 시 원본에서 다시 만든다
+  recalcAllStats(); save();
+
   var d=new Date();
   document.getElementById('dateChip').textContent = d.toLocaleDateString('ko-KR',{month:'long',day:'numeric',weekday:'short'});
   document.getElementById('rankMonthLabel').textContent = (d.getMonth()+1)+'월 기준';
@@ -196,7 +207,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // 화면 클릭 시 항상 입력창 포커스 복귀 (홈 화면일때만)
   document.addEventListener('click', function(e){
     var homeScreen = document.getElementById('screen-home');
-    if(homeScreen && homeScreen.classList.contains('active') && e.target.tagName !== 'BUTTON' && !e.target.closest('.mov')) {
+    if(homeScreen && homeScreen.classList.contains('active') && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'OPTION' && !e.target.closest('.mov')) {
       input.focus();
     }
   });
@@ -225,14 +236,16 @@ function processAttend(no){
   if(!rec){
     DB.attendance[td][s.id]={inTime:time, outTime:null};
     var prevBest = ensureStat(s.id).longestStreak;
-    var st = recordAttendanceStat(s.id, td);
+    recalcStatsForStudent(s.id);
+    var st = DB.stats[s.id];
     isNewBest = st.currentStreak > prevBest && st.currentStreak > 1;
     type  = 'success'; title = s.name+' 등원 처리됨';
     sub = '🔥 연속 '+st.currentStreak+'일 출석 중' + (isNewBest ? ' (신기록!)' : '');
     undoAction = function(){ cancelAttend(s.id, 'all', true); };
   } else if(isOut){
     DB.attendance[td][s.id].outTime=time;
-    var stayMin = addStayMinutes(s.id, td, rec.inTime, time);
+    recalcStatsForStudent(s.id);
+    var stayMin = timeDiffMinutes(rec.inTime, time);
     type  = 'checkout'; title = s.name+' 하원 처리됨'; sub = '오늘 학습 시간: '+stayMin+'분';
     undoAction = function(){ cancelAttend(s.id, 'outTime', true); };
   } else {
@@ -272,6 +285,7 @@ function openRecordPopup(sid, isNewBest){
   document.getElementById('recMinutes').textContent = st.monthlyMinutes[ym] || 0;
   document.getElementById('recMonthRank').textContent = monthRank ? (monthRank+'위 / '+DB.students.length+'명') : '-';
   document.getElementById('recStreakRank').textContent = streakRank ? (streakRank+'위 / '+DB.students.length+'명') : '-';
+  document.getElementById('recLastWeek').innerHTML = lastWeekHtml(sid, true);
 
   document.getElementById('recordMov').classList.add('show');
 }
@@ -281,19 +295,9 @@ function cancelAttend(sid, field, silent){
   if(!silent && !confirm('해당 기록을 취소하시겠습니까?')) return;
   var td=today();
   if(!DB.attendance[td] || !DB.attendance[td][sid]) return;
-  if(field==='all'){
-    delete DB.attendance[td][sid];
-    recalcStatsForStudent(sid);
-  } else if(field==='outTime'){
-    var rec = DB.attendance[td][sid];
-    if(rec.outTime && rec.inTime){
-      var st = ensureStat(sid);
-      var ym = td.slice(0,7);
-      var mins = timeDiffMinutes(rec.inTime, rec.outTime);
-      if(mins > 0) st.monthlyMinutes[ym] = Math.max(0, (st.monthlyMinutes[ym]||0) - mins);
-    }
-    rec.outTime=null;
-  }
+  if(field==='all') delete DB.attendance[td][sid];
+  else if(field==='outTime') DB.attendance[td][sid].outTime = null;
+  recalcStatsForStudent(sid);
   save(); renderRecent(); renderRank3Group();
   hideUndoToast();
   if(!silent) showToast('✅ 출결 기록이 정상적으로 취소되었습니다.');
@@ -399,7 +403,12 @@ function openAdd(){
   ['mNo','mName','mLevel'].forEach(function(i){document.getElementById(i).value='';});
   document.getElementById('addMov').classList.add('show');
 }
-function closeMov(id){document.getElementById(id).classList.remove('show');}
+function closeMov(id){
+  document.getElementById(id).classList.remove('show');
+  // 등원 팝업을 '확인'으로 닫으면 커서가 버튼에 남아 다음 학생의 번호 입력이 무시됐다 → 출결 데스크면 입력칸으로 돌려 둔다
+  var home = document.getElementById('screen-home');
+  if(home && home.classList.contains('active')) setTimeout(function(){ document.getElementById('numInput').focus(); }, 50);
+}
 
 function addStu(){
   var no=document.getElementById('mNo').value.trim().padStart(2,'0');
@@ -477,7 +486,7 @@ function dlStudents(){
 
 function dlRanking(){
   var ym=curYM();
-  var rows=[['등록번호','이름','레벨','이번달 출결일수','이번달 체류시간(분)','현재 연속출석(주말제외)','최장 연속기록']];
+  var rows=[['등록번호','이름','레벨','이번달 출결일수','이번달 체류시간(분)','현재 연속출석(주말·휴원일 제외)','최장 연속기록']];
   var sorted=[].concat(DB.students).sort(function(a,b){return a.no.localeCompare(b.no);});
   sorted.forEach(function(s){
     var st=DB.stats[s.id];
@@ -491,45 +500,96 @@ function dlRanking(){
 
 // ===== 데이터 관리 (JSON 백업 / 복구) =====
 function exportBackup() {
-  var dataStr = JSON.stringify(DB);
-  var blob = new Blob([dataStr], {type: "application/json;charset=utf-8;"});
+  // 백업 시각·버전을 함께 넣어 두면 복구할 때 "어느 시점 파일인지" 확인할 수 있다
+  var out = Object.assign({}, DB, { backupAt: fmtDate(new Date()) + ' ' + nowT(), appVersion: APP_VERSION });
+  var blob = new Blob([JSON.stringify(out)], {type: "application/json;charset=utf-8;"});
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = "acad_backup.json";
+  // 날짜를 파일명에 넣는다. 같은 이름이면 브라우저가 "(1)"을 붙여 옛 파일을 고르기 쉬웠다
+  a.download = "acad_backup_" + today() + ".json";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  try { localStorage.setItem(LAST_BACKUP_KEY, String(Date.now())); } catch(e){}
+  renderBackupInfo();
   showToast('💾 데이터 백업 파일이 다운로드되었습니다.');
 }
 
+// 복구 파일 검사. 문제가 있으면 원인을 한국어 문장으로, 없으면 null을 준다
+function validateBackup(obj){
+  if(!obj || typeof obj !== 'object' || Array.isArray(obj)) return '백업 파일의 내용이 비어 있거나 형식이 다릅니다.';
+  if(!Array.isArray(obj.students)) return '학생 명단(students)이 없습니다. 이 프로그램에서 만든 백업 파일이 맞는지 확인해 주세요.';
+  if(!obj.attendance || typeof obj.attendance !== 'object' || Array.isArray(obj.attendance)) return '출결 기록(attendance)이 없습니다. 이 프로그램에서 만든 백업 파일이 맞는지 확인해 주세요.';
+  for(var i = 0; i < obj.students.length; i++){
+    var st = obj.students[i];
+    if(!st || st.id == null || !st.no || !st.name) return (i+1) + '번째 학생 정보가 손상되었습니다 (번호·이름 누락).';
+  }
+  return null;
+}
+
 function importBackup(event) {
-  var file = event.target.files[0];
-  if(!file) return;
-  
-  if(!confirm("경고: 기존 출결 및 학생 데이터가 모두 삭제되고, 업로드한 파일의 데이터로 덮어쓰기 됩니다. 진행하시겠습니까?")) {
-    event.target.value = ''; // 초기화
-    return;
+  var inputEl = event.target;
+  var file = inputEl.files[0];
+  // 어떤 경우든 선택을 비워 둔다. 비우지 않으면 실패 후 같은 파일을 다시 골라도 반응하지 않는다
+  var done = function(){ inputEl.value = ''; };
+  if(!file){ done(); return; }
+
+  if(!/\.json$/i.test(file.name)){
+    alert('❌ JSON 백업 파일(.json)만 불러올 수 있습니다.\n선택한 파일: ' + file.name
+      + '\n\n※ CSV(엑셀) 파일은 열람용이라 복구에 쓸 수 없습니다.');
+    done(); return;
   }
 
   var reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      var newDB = JSON.parse(e.target.result);
-      if(newDB && newDB.students && newDB.attendance) {
-        DB = newDB;
-        save();
-        alert('✅ 데이터 복구가 성공적으로 완료되었습니다.\n새로고침을 진행합니다.');
-        location.reload();
-      } else {
-        alert('❌ 올바르지 않은 백업 파일 형식입니다.');
-      }
-    } catch(err) {
-      alert('❌ 파일 읽기 오류가 발생했습니다.');
-    }
+  reader.onerror = function(){
+    alert('❌ 파일을 읽지 못했습니다. 파일을 바탕화면 등으로 옮긴 뒤 다시 시도해 주세요.');
+    done();
   };
-  reader.readAsText(file);
+  reader.onload = function(e) {
+    var newDB;
+    try {
+      // 메모장 등으로 열었다 저장하면 맨 앞에 BOM 문자가 붙을 수 있어 제거한다
+      newDB = JSON.parse(String(e.target.result).replace(/^﻿/, ''));
+    } catch(err) {
+      alert('❌ 백업 파일 내용이 손상되었습니다 (JSON 형식 오류).\n\n'
+        + '• 백업 파일을 메모장·엑셀로 열어 수정·저장하지 않았는지 확인해 주세요.\n'
+        + '• 다운로드가 중간에 끊긴 파일일 수 있습니다. 다른 백업 파일로 시도해 주세요.');
+      done(); return;
+    }
+
+    var problem = validateBackup(newDB);
+    if(problem){ alert('❌ 올바른 백업 파일이 아닙니다.\n\n' + problem); done(); return; }
+
+    // 무엇으로 덮어쓰는지 보여 주고 확인받는다
+    var days = Object.keys(newDB.attendance).sort();
+    var summary = '불러올 백업 파일: ' + file.name
+      + (newDB.backupAt ? '\n백업 시각: ' + newDB.backupAt : '')
+      + '\n학생: ' + newDB.students.length + '명'
+      + '\n출결 기록: ' + days.length + '일' + (days.length ? ' (' + days[0] + ' ~ ' + days[days.length-1] + ')' : '')
+      + '\n\n현재 데이터(학생 ' + DB.students.length + '명, 출결 ' + Object.keys(DB.attendance).length + '일)는 '
+      + '이 파일의 내용으로 모두 바뀝니다. 진행하시겠습니까?';
+    if(!confirm(summary)){ done(); return; }
+
+    // 만일을 위해 덮어쓰기 직전 데이터를 따로 한 벌 남겨 둔다
+    try { localStorage.setItem(STORAGE_KEY + '-before-restore', JSON.stringify(DB)); } catch(err){}
+
+    delete newDB.backupAt; delete newDB.appVersion;
+    var prev = DB;
+    DB = newDB;
+    if(!save()){
+      DB = prev;
+      alert('❌ 브라우저 저장 공간에 기록하지 못했습니다.\n\n'
+        + '• 시크릿(비공개) 창에서는 복구가 유지되지 않습니다. 일반 창에서 다시 시도해 주세요.\n'
+        + '• 브라우저 저장 공간이 부족할 수 있습니다.');
+      done(); return;
+    }
+    done();
+    alert('✅ 데이터 복구가 완료되었습니다. (학생 ' + DB.students.length + '명, 출결 ' + days.length + '일)\n새로고침을 진행합니다.');
+    location.reload();
+  };
+  reader.readAsText(file, 'utf-8');
 }
 
 // ===== 설정 =====
@@ -619,6 +679,8 @@ function triggerUndo(){
     _pendingUndoAction();
   }
   hideUndoToast();
+  var input = document.getElementById('numInput');   // 취소 후 바로 다시 입력할 수 있게
+  if(input) setTimeout(function(){ input.focus(); }, 50);
 }
 
 // ===== 대한민국 양력 공휴일 =====
@@ -648,6 +710,7 @@ function addFixedHolidays(){
       added++;
     }
   });
+  if(added > 0) recalcAllStats();
   save();
   renderHolidays();
   if(added > 0) showToast('✅ ' + year + '년 공휴일 ' + added + '일이 추가되었습니다.');
@@ -682,6 +745,7 @@ function addHoliday(){
   if(!d){ showToast('날짜를 선택해 주세요.'); return; }
   if(isHoliday(d)){ showToast('이미 등록된 날짜입니다.'); return; }
   DB.holidays.push(d);
+  recalcAllStats();
   save();
   renderHolidays();
   input.value = '';
@@ -690,6 +754,7 @@ function addHoliday(){
 
 function removeHoliday(dateStr){
   DB.holidays = DB.holidays.filter(function(d){ return d !== dateStr; });
+  recalcAllStats();
   save();
   renderHolidays();
   showToast('휴원일에서 제외되었습니다.');
@@ -722,7 +787,7 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 // ===== 주간 출결 집계 =====
-// S1 판정 기준 정의서(A~F)를 코드로 옮긴 부분.
+// 기획서 5절 판정 기준(A~F)을 코드로 옮긴 부분.
 // 여기서 계산한 결과를 AI에게 재료로 넘긴다. 판정은 AI가 하지 않는다.
 
 // 기준일이 속한 주의 월요일을 구한다
@@ -740,13 +805,13 @@ function weekDays(monday){
   var d = new Date(monday + 'T00:00:00');
   for(var i = 0; i < 5; i++){
     var ds = fmtDate(d);
-    if(!isWeekend(ds) && !isHoliday(ds)) days.push(ds);
+    if(isOperatingDay(ds)) days.push(ds);
     d.setDate(d.getDate() + 1);
   }
   return days;
 }
 
-// 출석률로 등급을 판정한다 (S1 정의서 B·E)
+// 출석률로 등급을 판정한다 (기획서 5-B·E)
 function gradeOf(rate){
   if(rate >= 100) return '최고';
   if(rate >= 80)  return '양호';
@@ -771,7 +836,7 @@ function weeklyStats(sid, baseDate){
       if(rec.outTime){
         minutes.push(timeDiffMinutes(rec.inTime, rec.outTime));
       } else {
-        minutes.push(0);   // 하원 미체크는 0분 (S1 결정 D-4)
+        minutes.push(0);   // 하원 미체크는 0분 (기획서 5-D)
         noCheckout++;
       }
     }
@@ -793,7 +858,8 @@ function weeklyStats(sid, baseDate){
     present: present,      // 출석일
     rate: rate,            // 출석률 %
     grade: gradeOf(rate),  // 등급
-    streak: liveStreak(sid),
+    // 이번 주는 실시간 연속, 지난 주는 그 주가 끝났을 때의 연속
+    streak: monday < weekStart() ? streakEndingAt(sid, days.length ? days[days.length-1] : monday) : liveStreak(sid),
     bestStreak: st.longestStreak || 0,
     avgMinutes: avgMin,
     noCheckout: noCheckout
@@ -801,16 +867,17 @@ function weeklyStats(sid, baseDate){
 }
 
 // ===== 주간 리포트 화면 =====
-// 지침 9-2에 따라 역할을 나눈다.
+// 역할을 나눠 둔다.
 //   collectReportInput  입력 수집·검증
 //   renderReportStats   집계 결과 렌더링
-//   (다음 단계에서 API 호출 함수 추가)
+//   callReportApi       AI 호출 (아래 'AI 호출' 절)
+//   renderReportText    AI 결과 렌더링
 
 var reportTone = 'parent';   // 현재 선택된 톤
 
 // ===== 리포트 캐시 (2단 구조) =====
 // 같은 학생·같은 집계값·같은 톤이면 AI에게 물어볼 내용이 똑같다.
-// 이미 받아 둔 문장을 재사용해 불필요한 API 호출을 막는다 (제약 C5).
+// 이미 받아 둔 문장을 재사용해 불필요한 API 호출을 막는다 (기획서 6-6).
 //
 //   1단 메모리       — 가장 빠름. 새로고침하면 사라짐
 //   2단 localStorage — 브라우저를 껐다 켜도 남음
@@ -889,7 +956,7 @@ var REPORT_HISTORY_KEY = 'acad-report-history';
 // 항목당 700바이트 남짓이라 전체 0.7MB 수준이며, 출결 데이터와 함께 써도 여유가 있다.
 var REPORT_HISTORY_MAX = 1000;
 
-var TONE_LABEL = { parent:'학부모 발송용', student:'학생 열람용' };
+var TONE_LABEL = { parent:'학부모 발송용', student:'학생 열람용', peer:'지난주 보드(자동)' };
 
 function loadReportHistory(){
   try {
@@ -1043,7 +1110,7 @@ function updateReportName(){
   }
 }
 
-// 입력 수집 + 검증 (S1 정의서 F-5)
+// 입력 수집 + 검증 (기획서 5-F)
 function collectReportInput(){
   var input = document.getElementById('reportCode');
   var no = (input.value || '').trim();
@@ -1128,17 +1195,114 @@ function buildReportData(st){
   return lines.join('\n');
 }
 
-// API 호출 (지침 9-2의 3분할 중 '호출' 담당)
-async function callReportApi(data, tone){
-  var res = await fetch('/api/report', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: data, tone: tone })
-  });
-  return await res.json();
+// ===== AI 호출 (Gemini 직접 호출) =====
+// 서버 없이 이 HTML 파일에서 바로 Gemini를 부른다. (로컬 PC 전용 운영)
+// Gemini는 로컬 파일(file://)에서 오는 요청도 허용한다.
+//
+// 키는 설정 화면에서 한 번 등록하며, 출결 DB와 분리된 저장소에 둔다.
+// → JSON 백업 파일에 키가 섞여 나가지 않는다.
+
+var GEMINI_URL     = 'https://generativelanguage.googleapis.com/v1beta/interactions';
+var GEMINI_MODEL   = 'models/gemini-3-flash-preview';
+var GEMINI_TIMEOUT = 25000;
+var GEMINI_KEY_STORE = 'acad-gemini-key';
+
+// 판정은 코드가 끝냈다. AI는 문장만 쓴다.
+var REPORT_PROMPTS = {
+  parent: [
+    '너는 학원 원장을 돕는 주간 리포트 작성 조수다.',
+    '주어진 출결 데이터를 3~5문장의 한국어 리포트로 작성한다.',
+    '규칙:',
+    '- 등급은 이미 정해져 있다. 절대 다시 판단하지 마라.',
+    '- 숫자를 지어내지 마라. 주어진 값만 사용한다.',
+    '- 학부모에게 보낼 글이므로 정중하고 따뜻한 톤으로 쓴다.',
+    '- 질책하지 말고, 개선이 필요하면 격려로 마무리한다.',
+    '- 주어진 정보에 없는 이름·사실을 지어내지 마라. 학생 이름은 입력된 값만 그대로 쓴다.'
+  ].join('\n'),
+  student: [
+    '너는 학원 학생에게 이번 주 출결을 알려주는 조수다.',
+    '주어진 출결 데이터를 3~5문장의 한국어 글로 작성한다.',
+    '규칙:',
+    '- 등급은 이미 정해져 있다. 절대 다시 판단하지 마라.',
+    '- 숫자를 지어내지 마라. 주어진 값만 사용한다.',
+    '- 학생 본인이 읽는 글이므로 친근한 말투로 쓴다.',
+    '- 잘한 점을 먼저 말하고, 아쉬운 점은 짧게 덧붙인다.',
+    '- 주어진 정보에 없는 이름·사실을 지어내지 마라. 학생 이름은 입력된 값만 그대로 쓴다.'
+  ].join('\n'),
+  peer: [
+    "너는 학원 출결 게시판에 올라갈 '지난주 출결 한마디'를 쓰는 조수다.",
+    '이 글은 학원 친구들이 서로 돌려 보는 공개 게시물이다.',
+    '주어진 출결 데이터를 2~3문장의 한국어 글로 작성한다.',
+    '규칙:',
+    '- 등급은 이미 정해져 있다. 절대 다시 판단하지 마라.',
+    '- 숫자를 지어내지 마라. 주어진 값만 사용한다.',
+    '- 친구들이 함께 읽으므로 친근한 존댓말(~요)로 쓴다.',
+    '- 잘한 점을 숫자로 구체적으로 칭찬하고, 이번 주 목표를 한 가지 응원으로 제시한다.',
+    '- 다른 학생과 비교하거나 질책·망신을 주는 표현은 절대 쓰지 마라.',
+    '- 주어진 정보에 없는 이름·사실을 지어내지 마라. 학생 이름은 입력된 값만 그대로 쓴다.'
+  ].join('\n')
+};
+
+function getGeminiKey(){
+  try { return (localStorage.getItem(GEMINI_KEY_STORE) || '').trim(); } catch(e){ return ''; }
 }
 
-// AI 결과를 화면에 표시 (지침 9-2의 3분할 중 '렌더링' 담당)
+// steps 배열에서 model_output 타입의 텍스트만 뽑는다 (순서가 아니라 type으로 찾는다)
+function extractGeminiText(result){
+  var text = '';
+  (result && result.steps || []).forEach(function(step){
+    if(step.type !== 'model_output') return;
+    (step.content || []).forEach(function(c){ if(c.type === 'text') text += c.text || ''; });
+  });
+  return text.trim();
+}
+
+// 성공: {ok:true, text}  /  실패: {ok:false, error:'사용자용 문구'}
+// 인터넷 자체가 끊긴 경우에만 예외를 던진다 (호출하는 쪽에서 "연결 실패"로 처리)
+async function callReportApi(data, tone, keyOverride){
+  var key = keyOverride || getGeminiKey();
+  if(!key) return { ok:false, error:'AI 키가 등록되지 않았습니다. 설정 → AI 연결에서 Gemini API 키를 등록해 주세요.' };
+  if(!data) return { ok:false, error:'출결 데이터가 없습니다.' };
+
+  var ctrl = new AbortController();
+  var timer = setTimeout(function(){ ctrl.abort(); }, GEMINI_TIMEOUT);
+  var res;
+  try {
+    res = await fetch(GEMINI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        model: GEMINI_MODEL,
+        system_instruction: REPORT_PROMPTS[tone] || REPORT_PROMPTS.parent,
+        input: data,
+        generation_config: { thinking_level: 'low' }
+      }),
+      signal: ctrl.signal
+    });
+  } catch(e){
+    if(e && e.name === 'AbortError') return { ok:false, error:'응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.' };
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  // 외부 API의 원문 에러는 화면에 보이지 않는다 (키 일부가 섞여 나올 수 있음). 개발자용으로만 남긴다
+  if(!res.ok){
+    console.error('Gemini HTTP 오류:', res.status);
+    if(res.status === 400 || res.status === 401 || res.status === 403)
+      return { ok:false, error:'AI 키가 올바르지 않거나 사용할 수 없습니다. 설정 → AI 연결에서 키를 확인해 주세요.' };
+    if(res.status === 429)
+      return { ok:false, rateLimited:true, error:'AI 사용량이 많아 잠시 막혔습니다. 잠시 후 다시 시도해 주세요.' };
+    return { ok:false, error:'AI 서버가 혼잡합니다. 잠시 후 다시 시도해 주세요.' };
+  }
+
+  var text = '';
+  try { text = extractGeminiText(await res.json()); } catch(e){}
+  if(!text) return { ok:false, error:'리포트를 생성하지 못했습니다.' };
+  return { ok:true, text:text };
+}
+
+// AI 결과를 화면에 표시
 function renderReportText(text){
   var box = document.getElementById('reportOutput');
   box.innerHTML = '<div class="ro-box">' + text + '</div>'
@@ -1159,14 +1323,19 @@ async function generateReport(){
   var st = weeklyStats(input.sid);
   renderReportStats(st);                   // 카드는 항상 지금 입력된 번호의 것으로 맞춘다
 
-  // 이번 주 출결 기록이 0건이면 API를 호출하지 않는다 (S1 정의서 F-1)
+  // 이번 주 출결 기록이 0건이면 API를 호출하지 않는다 (기획서 5-F)
   // 카드(0/5, 0%)는 그대로 두고 안내 문구만 띄운다
+  // 한 주 전체가 휴원이면 원인이 다르므로 안내도 따로 한다
+  if(st.totalDays === 0){
+    showReportMessage('info', '이번 주는 전체 휴원(운영일 0일)이라 리포트를 만들 출결이 없습니다.');
+    return;
+  }
   if(st.present === 0){
     showReportMessage('error', '이번 주 출결 기록이 없습니다. 출결 현황 기록을 확인해주세요.');
     return;
   }
 
-    // 이미 같은 조건으로 받아 둔 리포트가 있으면 API를 부르지 않는다 (제약 C5)
+    // 이미 같은 조건으로 받아 둔 리포트가 있으면 API를 부르지 않는다 (기획서 6-6)
   var cacheKey = reportCacheKey(st, input.tone);
   if(reportCache[cacheKey]){
     renderReportText(reportCache[cacheKey]);
@@ -1175,7 +1344,7 @@ async function generateReport(){
   }
 
   // 요청 중에는 버튼과 입력칸을 함께 잠근다
-  // (연타로 인한 중복 호출·과금 방지, 제약 C5 / 대기 중 번호 변경 방지)
+  // (연타로 인한 중복 호출·과금 방지, 기획서 6-6 / 대기 중 번호 변경 방지)
   var btn  = document.getElementById('reportBtn');
   var code = document.getElementById('reportCode');
   btn.disabled  = true;
@@ -1207,7 +1376,7 @@ async function generateReport(){
 
 document.addEventListener('DOMContentLoaded', function(){
   // 톤 선택 버튼
-  var toneBtns = document.querySelectorAll('.tone-btn');
+  var toneBtns = document.querySelectorAll('#screen-report .tone-btn');   // 설정 화면의 같은 모양 버튼과 섞이지 않게 범위를 좁힌다
   toneBtns.forEach(function(btn){
     btn.addEventListener('click', function(){
       toneBtns.forEach(function(b){ b.classList.remove('active'); });
@@ -1233,4 +1402,640 @@ document.addEventListener('DOMContentLoaded', function(){
       if(e.key === 'Enter') generateReport();
     });
   }
+});
+
+// ===== 지난주 리포트 (자동 생성 + 친구 보드) =====
+// 이번 주에 등원하는 학생이 "지난주 나의 리포트"를 보고,
+// 출결 데스크의 보드에서 친구들의 지난주 리포트를 돌려 보며 서로 자극을 받게 한다.
+//
+//   자동 생성 — 원장이 버튼을 누르지 않는다. 데스크 PC가 켜져 있으면
+//              평일 13:30에 1차 시도, 14:00에 실패·누락분만 다시 시도한다.
+//              PC를 늦게 켰다면 켜진 직후 1차, 끝나는 대로 2차가 이어서 돈다.
+//   노출 규칙 — 생성 전에 등원한 학생은 그날 팝업에서 통계만 본다.
+//              AI 한마디는 생성이 끝난 뒤(보통 다음 날 등원 때)부터 보인다.
+//   보드     — 4초마다 한 명씩 순환. 드롭다운으로 특정 친구를 고정해 볼 수 있고,
+//              20초간 조작이 없으면 다시 순환으로 돌아간다(공용 PC라 고정된 채 방치되지 않도록).
+
+var AUTO_SLOTS        = ['13:30', '14:00'];  // 1차 시도, 2차(미생성분 재시도)
+var BOARD_INTERVAL_MS = 4000;
+var BOARD_RESUME_MS   = 20000;
+var WEEKLY_KEEP_WEEKS = 8;                   // 오래된 주차는 자동 정리
+// 무료 키는 분당 호출 수 제한이 있어, 40명을 연달아 부르면 429(사용량 제한)가 난다.
+// 학생 사이에 간격을 두고, 429가 나면 1분 쉬었다가 그 학생을 한 번 더 시도한다.
+var GEN_GAP_MS         = 7000;               // 호출 간격 (분당 최대 약 8회)
+var RATE_LIMIT_WAIT_MS = 60000;
+function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+function ensureWeekly(){
+  if(!DB.weekly || typeof DB.weekly !== 'object') DB.weekly = {};
+  if(!DB.weekly.reports) DB.weekly.reports = {};   // { 지난주월요일: { 학생ID: {text, at} } }
+  if(!DB.weekly.tries)   DB.weekly.tries   = {};   // { 이번주월요일: { '13:30': '시도시각', ... } }
+  return DB.weekly;
+}
+
+function lastWeekMonday(){
+  var d = new Date(weekStart() + 'T00:00:00');
+  d.setDate(d.getDate() - 7);
+  return fmtDate(d);
+}
+
+function lastWeekStats(sid){ return weeklyStats(sid, lastWeekMonday()); }
+
+function lastWeekReport(sid){
+  var bucket = ensureWeekly().reports[lastWeekMonday()];
+  return (bucket && bucket[sid]) || null;
+}
+
+function mmdd(ds){ return Number(ds.slice(5,7)) + '/' + Number(ds.slice(8,10)); }
+
+// 오래된 주차 정리 (저장 공간 보호)
+function pruneWeekly(){
+  var w = ensureWeekly();
+  ['reports','tries'].forEach(function(k){
+    var weeks = Object.keys(w[k]).sort();
+    while(weeks.length > WEEKLY_KEEP_WEEKS) delete w[k][weeks.shift()];
+  });
+}
+
+// ----- 자동 생성 -----
+var _weeklyRunning = false;
+
+// 대상: 지난주 운영일이 있고, 한 번이라도 출석했고, 아직 리포트가 없는 학생
+function weeklyTargets(){
+  var mon = lastWeekMonday();
+  return DB.students.filter(function(s){
+    if(lastWeekReport(s.id)) return false;
+    var st = weeklyStats(s.id, mon);
+    return st.totalDays > 0 && st.present > 0;
+  });
+}
+
+async function runWeeklyGeneration(){
+  if(_weeklyRunning) return;
+  _weeklyRunning = true;
+  renderAutoStatus();
+
+  var mon = lastWeekMonday();
+  var w = ensureWeekly();
+  var targets = weeklyTargets();
+
+  // 한 명씩 차례로 호출한다 (동시 호출 시 API 제한·과금 폭주 방지)
+  for(var i = 0; i < targets.length; i++){
+    var s = targets[i];
+    var st = weeklyStats(s.id, mon);
+    try {
+      if(i > 0) await sleep(GEN_GAP_MS);
+      var r = await callReportApi(buildReportData(st), 'peer');
+      if(r && r.rateLimited){
+        await sleep(RATE_LIMIT_WAIT_MS);
+        r = await callReportApi(buildReportData(st), 'peer');
+      }
+      if(r && r.ok){
+        if(!w.reports[mon]) w.reports[mon] = {};
+        w.reports[mon][s.id] = { text: r.text, at: fmtDate(new Date()) + ' ' + nowT() };
+        save();
+        addReportHistory(st, 'peer', r.text);
+      } else {
+        console.warn('지난주 리포트 생성 실패:', s.name, r && r.error);
+      }
+    } catch(e){
+      // 네트워크 자체가 안 되면 나머지도 실패하므로 여기서 멈추고 다음 시도에 맡긴다
+      console.error('지난주 리포트 요청 실패:', e);
+      break;
+    }
+    renderAutoStatus();
+  }
+
+  pruneWeekly(); save();
+  _weeklyRunning = false;
+  renderAutoStatus();
+  renderBoard();
+}
+
+// 30초마다 확인. 지난 시각의 슬롯 중 아직 시도하지 않은 것을 하나씩 실행한다
+function autoTick(){
+  if(_weeklyRunning) return;
+  var td = today();
+  if(isWeekend(td)) return;                 // 주말에는 돌리지 않는다
+
+  if(!getGeminiKey()) return;               // 키 등록 전에는 시도하지 않는다 (등록 후 바로 돌 수 있게)
+
+  var w = ensureWeekly();
+  var thisMon = weekStart();
+  var tries = w.tries[thisMon] || (w.tries[thisMon] = {});
+  var now = nowT();
+
+  for(var i = 0; i < AUTO_SLOTS.length; i++){
+    var slot = AUTO_SLOTS[i];
+    if(now >= slot && !tries[slot]){
+      tries[slot] = td + ' ' + now;         // 먼저 표시해 두어 중복 실행을 막는다
+      save();
+      runWeeklyGeneration();
+      return;
+    }
+  }
+}
+
+// 원장 화면 — 자동 생성 현황 (수동 버튼은 비상용)
+function renderAutoStatus(){
+  var box = document.getElementById('autoStatus');
+  if(!box) return;
+  var mon = lastWeekMonday();
+  var days = weekDays(mon);
+  var lastDay = days.length ? days[days.length-1] : mon;
+  var w = ensureWeekly();
+  var tries = w.tries[weekStart()] || {};
+  var made = Object.keys(w.reports[mon] || {}).length;
+  var remain = weeklyTargets().length;
+
+  var slotHtml = AUTO_SLOTS.map(function(sl){
+    return '<span class="auto-slot' + (tries[sl] ? ' done' : '') + '">' + sl + ' '
+      + (tries[sl] ? '시도함' : '대기') + '</span>';
+  }).join('');
+
+  var stateText;
+  if(!days.length)          stateText = '지난주는 전체 휴원이라 생성할 리포트가 없습니다.';
+  else if(!getGeminiKey())  stateText = '⚠️ AI 키가 등록되지 않아 자동 생성이 멈춰 있습니다. 설정 → AI 연결에서 등록해 주세요.';
+  else if(_weeklyRunning)   stateText = '생성 중... (' + made + '건 완료, ' + remain + '건 남음)';
+  else if(remain === 0)     stateText = '대상 학생 리포트가 모두 준비되었습니다. (' + made + '건)';
+  else                      stateText = made + '건 생성 · ' + remain + '건 미생성';
+
+  box.innerHTML =
+      '<div class="auto-head">'
+    +   '<div><b>지난주 리포트 자동 생성</b> <span class="auto-period">'
+    +     mmdd(mon) + ' ~ ' + mmdd(lastDay) + '</span></div>'
+    +   '<div class="auto-slots">' + slotHtml + '</div>'
+    + '</div>'
+    + '<div class="auto-state">' + stateText + '</div>'
+    + ((remain > 0 && !_weeklyRunning && getGeminiKey())
+        ? '<button class="auto-now" id="autoNowBtn">미생성분 지금 생성</button>' : '');
+
+  var btn = document.getElementById('autoNowBtn');
+  if(btn) btn.addEventListener('click', function(){ runWeeklyGeneration(); });
+}
+
+// ----- 화면 조각: 지난주 리포트 카드 -----
+// inPopup=true면 본인용(기록 팝업), false면 보드용
+function lastWeekHtml(sid, inPopup){
+  var s = DB.students.find(function(x){ return x.id === sid; });
+  if(!s) return '';
+  var st = lastWeekStats(sid);
+  var rep = lastWeekReport(sid);
+  var period = mmdd(st.monday) + ' ~ ' + mmdd(st.lastDay);
+
+  var head = inPopup
+    ? '<div class="lw-title">📋 지난주 나의 리포트 <span class="lw-period">' + period + '</span></div>'
+    : '<div class="lw-who"><span class="lw-name">' + s.name + '</span>'
+      + '<span class="lw-level">' + (s.level || '') + '</span>'
+      + (inPopup || st.present === 0 || st.totalDays === 0 ? '' : '@@STATS@@')
+      + '<span class="lw-period">' + period + '</span></div>';
+
+  // 한 주 전체 휴원 (운영일 0일)
+  if(st.totalDays === 0){
+    return head + '<div class="lw-msg">지난주는 전체 휴원이었어요. 이번 주도 함께 힘내요! 💪</div>';
+  }
+  // 지난주 출석 0일 — 등급(주의)을 드러내지 않고 응원만 한다
+  if(st.present === 0){
+    return head + '<div class="lw-msg">지난주에는 출석 기록이 없어요. 이번 주에 새로 시작해 봐요! 🌱</div>';
+  }
+
+  var stats =
+      '<div class="lw-stats">'
+    +   '<span class="lw-grade grade-' + st.grade + '">' + st.grade + '</span>'
+    +   '<span class="lw-stat"><b>' + st.present + '/' + st.totalDays + '</b>일 출석</span>'
+    +   (st.streak > 0 ? '<span class="lw-stat">🔥 <b>' + st.streak + '</b>일 연속</span>' : '')   // 0일 연속은 굳이 드러내지 않는다
+    +   '<span class="lw-stat">⏱️ 평균 <b>' + st.avgMinutes + '</b>분</span>'
+    + '</div>';
+
+  var text = rep
+    ? '<div class="lw-text">' + rep.text + '</div>'
+    : '<div class="lw-pending">AI 한마디는 준비 중이에요. '
+      + (inPopup ? '다음 등원 때 확인할 수 있어요!' : '오후 1시 30분 이후 공개됩니다.') + '</div>';
+
+  // 보드에서는 통계를 이름 줄에 붙여 한 줄로 만든다 (카드 높이를 AI 문장에 양보)
+  if(!inPopup) return head.replace('@@STATS@@', stats) + text;
+  return head + stats + text;
+}
+
+// ----- 친구 보드 (4초 순환 + 드롭다운 고정) -----
+var _boardIdx = 0, _boardPinned = null, _boardTimer = null, _boardResumeTimer = null;
+
+// 순환 대상: 지난주 한 번이라도 출석한 학생 (0일인 친구를 공개적으로 돌리지 않는다)
+function boardRotation(){
+  var mon = lastWeekMonday();
+  return [].concat(DB.students)
+    .sort(function(a,b){ return a.no.localeCompare(b.no); })
+    .filter(function(s){ return weeklyStats(s.id, mon).present > 0; });
+}
+
+function fillBoardSelect(){
+  var sel = document.getElementById('boardSelect');
+  if(!sel) return;
+  var sorted = [].concat(DB.students).sort(function(a,b){ return a.no.localeCompare(b.no); });
+  // 4초마다 불리므로 명단이 바뀌었을 때만 다시 그린다 (열려 있는 드롭다운이 닫히지 않도록)
+  var sig = sorted.map(function(s){ return s.id + ':' + s.no + ':' + s.name; }).join('|');
+  if(sel._sig === sig) return;
+  sel._sig = sig;
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">🔄 전체 순환</option>'
+    + sorted.map(function(s){
+        return '<option value="' + s.id + '">' + s.no + ' ' + s.name + '</option>';
+      }).join('');
+  sel.value = cur;
+  if(sel.value !== cur) sel.value = '';
+}
+
+var BOARD_SLOTS = 3;   // 한 번에 보여 주는 리포트 수 (1920×1080 기준 세 명이 한 칸에 꽉 차게)
+
+// 카드 높이에 맞춰 AI 문장 글자 크기를 정한다 (1920×1080에서 세 장이 꽉 차 보이도록).
+// 세 장 모두 들어가는 가장 큰 크기를 공통으로 쓰고, 최소 크기로도 넘치면 "…"로 줄인다.
+// 화면 크기·문장 길이마다 달라서 CSS 고정값 대신 실제 높이로 계산한다.
+var BOARD_FONT_MAX = 24, BOARD_FONT_MIN = 13;
+function fitBoardText(){
+  var els = Array.prototype.slice.call(document.querySelectorAll('#boardCard .board-card .lw-text'));
+  if(!els.length || window.innerWidth <= 768) return;
+
+  els.forEach(function(el){ el.style.webkitLineClamp = 'unset'; el.style.display = 'block'; });
+  var size = BOARD_FONT_MAX;
+  for(; size > BOARD_FONT_MIN; size -= 0.5){
+    els.forEach(function(el){ el.style.fontSize = size + 'px'; });
+    if(els.every(function(el){ return el.scrollHeight <= el.clientHeight + 1; })) break;
+  }
+  els.forEach(function(el){
+    el.style.fontSize = size + 'px';
+    el.style.display = '';
+    var lh = parseFloat(getComputedStyle(el).lineHeight) || size * 1.65;
+    el.style.webkitLineClamp = String(Math.max(1, Math.floor((el.clientHeight + 1) / lh)));
+  });
+}
+
+function renderBoard(){
+  var stack = document.getElementById('boardCard');
+  var dots = document.getElementById('boardDots');
+  if(!stack) return;
+  fillBoardSelect();
+
+  var list = boardRotation();
+  var shown = [];
+
+  if(_boardPinned){
+    // 고른 친구를 맨 위에, 그 뒤로 순서상 다음 친구들을 채운다
+    shown.push(_boardPinned);
+    var start = list.findIndex(function(s){ return s.id === _boardPinned; });
+    for(var k = 1; shown.length < BOARD_SLOTS && k <= list.length; k++){
+      var nx = list[((start < 0 ? -1 : start) + k + list.length) % list.length];
+      if(nx && shown.indexOf(nx.id) < 0) shown.push(nx.id);
+    }
+  } else {
+    if(!list.length){
+      var noDays = weekDays(lastWeekMonday()).length === 0;
+      stack.innerHTML = '<div class="lw-msg">' + (noDays
+        ? '지난주는 전체 휴원이었어요. 이번 주 기록이 다음 주 보드에 올라옵니다!'
+        : '아직 보드에 올릴 지난주 기록이 없어요.') + '</div>';
+      if(dots) dots.innerHTML = '';
+      renderBoardControls();
+      return;
+    }
+    _boardIdx = _boardIdx % list.length;
+    for(var j = 0; j < Math.min(BOARD_SLOTS, list.length); j++){
+      shown.push(list[(_boardIdx + j) % list.length].id);
+    }
+  }
+
+  stack.innerHTML = shown.map(function(sid, i){
+    return '<div class="board-card' + (_boardPinned && i === 0 ? ' pinned' : '') + '">' + lastWeekHtml(sid, false) + '</div>';
+  }).join('');
+  stack.classList.remove('slide'); void stack.offsetWidth; stack.classList.add('slide');
+  fitBoardText();
+
+  renderBoardControls();
+  if(!dots) return;
+  if(_boardPinned){
+    dots.innerHTML = '<span class="board-pin">📌 선택한 친구 · 잠시 후 순환</span>';
+  } else if(list.length <= BOARD_SLOTS){
+    dots.innerHTML = '';
+  } else if(list.length > 12){
+    dots.innerHTML = '<span class="board-count">' + (_boardIdx + 1) + ' / ' + list.length + '</span>';
+  } else {
+    var on = shown.map(function(sid){ return list.findIndex(function(s){ return s.id === sid; }); });
+    dots.innerHTML = list.map(function(_, i){ return '<i class="' + (on.indexOf(i) > -1 ? 'on' : '') + '"></i>'; }).join('');
+  }
+}
+
+window.addEventListener('resize', function(){ clearTimeout(window._fitT); window._fitT = setTimeout(fitBoardText, 150); });
+
+function boardNext(){
+  if(_boardPinned || _boardPaused) return;
+  var home = document.getElementById('screen-home');
+  if(home && !home.classList.contains('active')) return;   // 다른 화면에서는 돌리지 않는다
+  if(boardRotation().length <= BOARD_SLOTS) return;          // 모두 한 화면에 보이면 돌릴 필요 없음
+  _boardIdx++;
+  renderBoard();
+}
+
+// ----- 보드 조작: 이전·다음 화살표, 일시정지(❚❚)·재생(▶) -----
+// 일시정지 후 재생을 누르지 않으면 10초 뒤 저절로 다시 돈다 (공용 PC에 멈춘 채 방치되지 않도록).
+// 멈춘 동안 화살표를 누르면 "아직 읽는 중"으로 보고 10초를 다시 센다.
+var BOARD_PAUSE_MS = 10000;
+var _boardPaused = false, _boardPauseUntil = 0, _boardPauseTick = null;
+
+function restartBoardTimer(){
+  clearInterval(_boardTimer);
+  _boardTimer = setInterval(boardNext, BOARD_INTERVAL_MS);   // 손으로 넘긴 직후 바로 또 넘어가지 않게 4초를 새로 센다
+}
+
+function boardStep(d){
+  if(_boardPinned){                                          // 고정 중이면 풀고 순환 위치에서 이어 간다
+    clearTimeout(_boardResumeTimer);
+    var start = boardRotation().findIndex(function(s){ return s.id === _boardPinned; });
+    if(start > -1) _boardIdx = start;
+    _boardPinned = null;
+    var sel = document.getElementById('boardSelect');
+    if(sel) sel.value = '';
+  }
+  var n = boardRotation().length;
+  if(n > BOARD_SLOTS) _boardIdx = ((_boardIdx + d) % n + n) % n;
+  renderBoard();
+  restartBoardTimer();
+  if(_boardPaused) startPauseCountdown();
+}
+
+function pauseBoard(){
+  _boardPaused = true;
+  startPauseCountdown();
+}
+
+function startPauseCountdown(){
+  _boardPauseUntil = Date.now() + BOARD_PAUSE_MS;
+  clearInterval(_boardPauseTick);
+  _boardPauseTick = setInterval(function(){
+    if(Date.now() >= _boardPauseUntil) resumeBoard();
+    else renderBoardControls();
+  }, 250);
+  renderBoardControls();
+}
+
+function resumeBoard(){
+  _boardPaused = false;
+  clearInterval(_boardPauseTick);
+  restartBoardTimer();
+  renderBoardControls();
+}
+
+function renderBoardControls(){
+  var nav = document.getElementById('boardNav');
+  var play = document.getElementById('boardPlayBtn');
+  if(!nav || !play) return;
+  // 세 명 이하라 순환하지 않을 때는 조작 버튼을 감춘다
+  nav.classList.toggle('hidden', boardRotation().length <= BOARD_SLOTS);
+  if(_boardPaused){
+    var sec = Math.max(1, Math.ceil((_boardPauseUntil - Date.now()) / 1000));
+    play.textContent = '▶ ' + sec;
+    play.title = '다시 재생 (' + sec + '초 뒤 자동 재생)';
+    play.classList.add('paused');
+  } else {
+    play.textContent = '❚❚';
+    play.title = '잠시 멈춤';
+    play.classList.remove('paused');
+  }
+}
+
+function pinBoard(sidStr){
+  clearTimeout(_boardResumeTimer);
+  _boardPinned = sidStr ? Number(sidStr) : null;
+  if(_boardPinned){
+    _boardResumeTimer = setTimeout(function(){
+      _boardPinned = null;
+      var sel = document.getElementById('boardSelect');
+      if(sel) sel.value = '';
+      renderBoard();
+    }, BOARD_RESUME_MS);
+  }
+  renderBoard();
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  var sel = document.getElementById('boardSelect');
+  if(sel){
+    sel.addEventListener('change', function(){
+      pinBoard(this.value);
+      // 드롭다운을 쓴 뒤에도 다음 학생이 바로 번호를 입력할 수 있게 입력칸으로 돌려 둔다
+      var input = document.getElementById('numInput');
+      if(input) setTimeout(function(){ input.focus(); }, 50);
+    });
+  }
+  renderBoard();
+  restartBoardTimer();
+
+  // 버튼을 누른 뒤에도 다음 학생이 바로 번호를 칠 수 있게 입력칸으로 커서를 돌려 둔다
+  var backToInput = function(){ var input = document.getElementById('numInput'); if(input) setTimeout(function(){ input.focus(); }, 50); };
+  var prev = document.getElementById('boardPrevBtn');  if(prev) prev.addEventListener('click', function(){ boardStep(-1); backToInput(); });
+  var next = document.getElementById('boardNextBtn');  if(next) next.addEventListener('click', function(){ boardStep(1); backToInput(); });
+  var play = document.getElementById('boardPlayBtn');  if(play) play.addEventListener('click', function(){ _boardPaused ? resumeBoard() : pauseBoard(); backToInput(); });
+
+  setTimeout(autoTick, 2000);
+  setInterval(autoTick, 30000);
+});
+
+
+// ===== 설정: AI 연결 (Gemini API 키) =====
+function maskKey(k){ return k ? ('••••••••' + k.slice(-4)) : ''; }
+
+function renderKeyStatus(){
+  var el = document.getElementById('keyStatus');
+  if(!el) return;
+  var k = getGeminiKey();
+  el.className = 'key-status ' + (k ? 'on' : 'off');
+  el.textContent = k ? ('✅ 등록됨 (' + maskKey(k) + ')') : '⚠️ 등록된 키가 없습니다. AI 문장 없이 통계만 표시됩니다.';
+}
+
+function saveGeminiKey(){
+  var input = document.getElementById('keyInput');
+  var k = (input.value || '').trim().replace(/^["']|["']$/g, '');
+  if(!k){ showToast('키를 붙여 넣어 주세요.'); return; }
+  try { localStorage.setItem(GEMINI_KEY_STORE, k); } catch(e){ showToast('⚠️ 키를 저장하지 못했습니다.'); return; }
+  input.value = '';
+  renderKeyStatus(); renderAutoStatus();
+  showToast('✅ AI 키가 저장되었습니다. [연결 테스트]로 확인해 보세요.');
+  setTimeout(autoTick, 500);   // 오늘 자동 생성 시각이 지났다면 바로 시작
+}
+
+function deleteGeminiKey(){
+  if(!getGeminiKey()) return;
+  if(!confirm('등록된 AI 키를 삭제할까요?')) return;
+  try { localStorage.removeItem(GEMINI_KEY_STORE); } catch(e){}
+  renderKeyStatus(); renderAutoStatus();
+  showToast('AI 키를 삭제했습니다.');
+}
+
+async function testGeminiKey(){
+  var btn = document.getElementById('keyTestBtn');
+  var typed = (document.getElementById('keyInput').value || '').trim();
+  if(!typed && !getGeminiKey()){ showToast('먼저 키를 붙여 넣어 주세요.'); return; }
+  btn.disabled = true; btn.textContent = '확인 중...';
+  try {
+    var r = await callReportApi('학생 이름: 테스트\n출석: 1일 / 1일 (100%)\n등급: 최고', 'student', typed || null);
+    if(r.ok) alert('✅ AI 연결 성공!\n\n받은 문장 예시:\n' + r.text);
+    else alert('❌ AI 연결 실패\n\n' + r.error);
+  } catch(e){
+    alert('❌ 인터넷에 연결되어 있지 않습니다.\n인터넷 연결을 확인한 뒤 다시 시도해 주세요.');
+  } finally {
+    btn.disabled = false; btn.textContent = '연결 테스트';
+  }
+}
+
+// ===== 백업 알림 =====
+// 모든 데이터가 이 PC의 브라우저 안에만 있으므로, 백업 파일이 유일한 안전장치다.
+var LAST_BACKUP_KEY = 'acad-last-backup';
+var BACKUP_REMIND_DAYS = 7;
+
+function daysSinceBackup(){
+  var t = 0;
+  try { t = Number(localStorage.getItem(LAST_BACKUP_KEY)) || 0; } catch(e){}
+  return t ? Math.floor((Date.now() - t) / 86400000) : null;   // null = 한 번도 안 함
+}
+
+function renderBackupInfo(){
+  var el = document.getElementById('backupInfo');
+  if(!el) return;
+  var d = daysSinceBackup();
+  var late = d === null || d >= BACKUP_REMIND_DAYS;
+  el.className = 'backup-info' + (late ? ' late' : '');
+  el.textContent = d === null ? '⚠️ 아직 백업한 적이 없습니다. 지금 한 번 백업해 두세요.'
+    : d === 0 ? '✅ 마지막 백업: 오늘'
+    : (late ? '⚠️ ' : '✅ ') + '마지막 백업: ' + d + '일 전' + (late ? ' — 백업을 권장합니다.' : '');
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  var kSave = document.getElementById('keySaveBtn');   if(kSave) kSave.addEventListener('click', saveGeminiKey);
+  var kTest = document.getElementById('keyTestBtn');   if(kTest) kTest.addEventListener('click', testGeminiKey);
+  var kDel  = document.getElementById('keyDelBtn');    if(kDel)  kDel.addEventListener('click', deleteGeminiKey);
+  renderKeyStatus();
+  renderBackupInfo();
+
+  // 출결 기록이 있는데 백업이 오래됐으면 켤 때 한 번 알려 준다
+  var d = daysSinceBackup();
+  if(Object.keys(DB.attendance).length && (d === null || d >= BACKUP_REMIND_DAYS)){
+    setTimeout(function(){
+      showToast('💾 ' + (d === null ? '아직 백업한 적이 없습니다.' : '마지막 백업이 ' + d + '일 전입니다.') + ' 데이터 관리에서 백업해 주세요.');
+    }, 1500);
+  }
+});
+
+
+// ===== 업데이트 확인 알림 =====
+// 업데이트 파일(SBCP_Update_*.exe)은 프로그램 파일만 바꾼다.
+// 새 버전으로 처음 열렸을 때 한 번만 알려 주어, 업데이트가 적용됐는지 눈으로 확인할 수 있게 한다.
+var LAST_VERSION_KEY = 'acad-last-version';
+var WHATS_NEW = '사이드바는 왼쪽 위 ☰ 버튼으로 열고, 지난주 리포트는 ❚❚ 버튼으로 잠시 멈출 수 있습니다.';
+
+document.addEventListener('DOMContentLoaded', function(){
+  var prev = null;
+  try { prev = localStorage.getItem(LAST_VERSION_KEY); localStorage.setItem(LAST_VERSION_KEY, APP_VERSION); } catch(e){ return; }
+  if(prev && prev !== APP_VERSION){
+    var v = (APP_VERSION.match(/_(\d+\.\d+)/) || [])[1];
+    setTimeout(function(){ showToast('✅ v' + v + ' 업데이트가 적용되었습니다. ' + WHATS_NEW); }, 2500);
+  }
+});
+
+
+// ===== 화면 설정: 사이드바 숨기기 · 화면 자동 맞춤 · 시작 시 전체 화면 =====
+// 출결 데스크 PC 전용 화면 설정이라 출결 DB와 분리해 이 브라우저에만 저장한다 (백업 대상 아님).
+var UI_KEY = 'acad-ui';
+var UI_DEFAULT = { sidebar:'hidden', autoFull:'on', scale:'auto' };
+var UI = (function(){
+  try { return Object.assign({}, UI_DEFAULT, JSON.parse(localStorage.getItem(UI_KEY) || '{}')); }
+  catch(e){ return Object.assign({}, UI_DEFAULT); }
+})();
+function saveUi(){ try { localStorage.setItem(UI_KEY, JSON.stringify(UI)); } catch(e){} }
+
+// 자동 맞춤 기준 크기: 이 크기보다 작은 화면이면 전체를 비율대로 줄인다 (브라우저 "축소"를 자동으로 하는 것)
+// 높이 1080은 출결 데스크(랭킹 3칸·리포트 3장)가 스크롤 없이 들어가는 높이(1920×1080 설계 기준),
+// 폭은 사이드바를 숨기면 그만큼(260px) 덜 필요하다.
+var FIT_BASE_H = 1080, FIT_BASE_W_SIDEBAR = 1920, FIT_BASE_W_NOSIDEBAR = 1660;
+
+function currentZoom(){
+  if(window.innerWidth <= 768) return 1;                  // 모바일 배치는 따로 있으므로 건드리지 않는다
+  if(UI.scale !== 'auto') return Number(UI.scale) || 1;
+  var baseW = UI.sidebar === 'shown' ? FIT_BASE_W_SIDEBAR : FIT_BASE_W_NOSIDEBAR;
+  return Math.min(1, window.innerWidth / baseW, window.innerHeight / FIT_BASE_H);
+}
+
+function applyScale(){
+  var z = Math.round(currentZoom() * 1000) / 1000;
+  document.documentElement.style.zoom = (z === 1) ? '' : String(z);
+  document.documentElement.style.setProperty('--ui-zoom', String(z));
+  var info = document.getElementById('uiScaleInfo');
+  if(info) info.textContent = '현재 화면 ' + window.innerWidth + '×' + window.innerHeight + ' → ' + Math.round(z * 100) + '% 로 표시 중';
+}
+
+function applySidebar(){
+  document.body.classList.toggle('sidebar-hidden', UI.sidebar !== 'shown');
+  document.body.classList.remove('sidebar-open');
+}
+
+function renderUiSettings(){
+  document.querySelectorAll('[data-ui]').forEach(function(group){
+    var key = group.getAttribute('data-ui');
+    group.querySelectorAll('.tone-btn').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-v') === String(UI[key]));
+    });
+  });
+  var sel = document.getElementById('uiScaleSelect');
+  if(sel) sel.value = String(UI.scale);
+  applyScale();
+}
+
+// ----- 전체 화면 -----
+// 브라우저는 사용자의 클릭·키 입력 없이 웹페이지가 스스로 전체 화면이 되는 것을 막는다.
+// 그래서 (1) 설치 파일이 만든 바로가기가 브라우저를 --start-fullscreen 으로 켜고,
+//         (2) 그렇게 켜지지 않았을 때는 첫 키 입력·클릭 순간에 전체 화면으로 바꾼다 (한 번만).
+function isFullscreenLike(){
+  return !!document.fullscreenElement
+    || (Math.abs(window.innerWidth - screen.width) < 3 && Math.abs(window.innerHeight - screen.height) < 3);   // F11 상태
+}
+function enterFullscreen(){
+  var el = document.documentElement;
+  if(!isFullscreenLike() && el.requestFullscreen) el.requestFullscreen().catch(function(){});
+}
+var _autoFullTried = false;
+function autoFullscreenOnce(){
+  if(_autoFullTried) return;
+  _autoFullTried = true;                                   // Esc로 나간 뒤에는 다시 강제하지 않는다
+  if(UI.autoFull === 'on') enterFullscreen();
+}
+
+applySidebar();
+applyScale();
+
+window.addEventListener('resize', applyScale);
+document.addEventListener('keydown', autoFullscreenOnce, true);
+document.addEventListener('pointerdown', autoFullscreenOnce, true);
+
+document.addEventListener('DOMContentLoaded', function(){
+  var menu = document.getElementById('menuBtn');
+  if(menu) menu.addEventListener('click', function(){ document.body.classList.toggle('sidebar-open'); });
+  var backdrop = document.getElementById('sidebarBackdrop');
+  if(backdrop) backdrop.addEventListener('click', function(){ document.body.classList.remove('sidebar-open'); });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') document.body.classList.remove('sidebar-open'); });
+
+  document.querySelectorAll('[data-ui] .tone-btn').forEach(function(b){
+    b.addEventListener('click', function(){
+      var key = b.parentNode.getAttribute('data-ui');
+      UI[key] = b.getAttribute('data-v');
+      saveUi();
+      if(key === 'sidebar') applySidebar();
+      renderUiSettings();
+      setTimeout(fitBoardText, 300);
+    });
+  });
+  var sel = document.getElementById('uiScaleSelect');
+  if(sel) sel.addEventListener('change', function(){
+    UI.scale = this.value; saveUi(); renderUiSettings(); setTimeout(fitBoardText, 300);
+  });
+  var full = document.getElementById('fullToggleBtn');
+  if(full) full.addEventListener('click', function(){
+    if(document.fullscreenElement) document.exitFullscreen(); else enterFullscreen();
+  });
+  renderUiSettings();
 });
