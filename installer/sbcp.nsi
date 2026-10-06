@@ -32,6 +32,7 @@ VIAddVersionKey /LANG=1042 "CompanyName" "${PUBLISHER}"
 VIAddVersionKey /LANG=1042 "LegalCopyright" "${PUBLISHER}"
 
 !include "MUI2.nsh"
+!include "common.nsh"
 
 !define MUI_ICON   "sbcp.ico"
 !define MUI_UNICON "sbcp.ico"
@@ -72,7 +73,11 @@ VIAddVersionKey /LANG=1042 "LegalCopyright" "${PUBLISHER}"
 !insertmacro MUI_LANGUAGE "Korean"
 
 Function OpenApp
-  ExecShell "open" "$INSTDIR\SBCP.html"
+  ${If} $BROWSER != ""
+    Exec '"$BROWSER" --start-fullscreen "$INSTDIR\SBCP.html"'
+  ${Else}
+    ExecShell "open" "$INSTDIR\SBCP.html"
+  ${EndIf}
 FunctionEnd
 
 Function OpenManual
@@ -86,8 +91,9 @@ Section "프로그램 (필수)" SecMain
   File "/oname=사용설명서.html" "../build/manual.html"
   File "sbcp.ico"
 
+  Call SBCP_ChooseBrowser
   CreateDirectory "${SMDIR}"
-  CreateShortcut "${SMDIR}\${APPNAME}.lnk" "$INSTDIR\SBCP.html" "" "$INSTDIR\sbcp.ico" 0
+  !insertmacro SBCP_Shortcut "${SMDIR}\${APPNAME}.lnk"
   CreateShortcut "${SMDIR}\사용설명서.lnk" "$INSTDIR\사용설명서.html"
   CreateShortcut "${SMDIR}\삼복출프 제거.lnk" "$INSTDIR\uninstall.exe"
 
@@ -103,17 +109,17 @@ Section "프로그램 (필수)" SecMain
 SectionEnd
 
 Section "바탕화면 바로가기" SecDesktop
-  CreateShortcut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\SBCP.html" "" "$INSTDIR\sbcp.ico" 0
+  !insertmacro SBCP_Shortcut "$DESKTOP\${APPNAME}.lnk"
 SectionEnd
 
-Section "Windows 시작 시 자동 실행" SecStartup
-  CreateShortcut "$SMSTARTUP\${APPNAME}.lnk" "$INSTDIR\SBCP.html" "" "$INSTDIR\sbcp.ico" 0
+Section "Windows 시작 시 자동 실행 (전체 화면)" SecStartup
+  !insertmacro SBCP_Shortcut "$SMSTARTUP\${APPNAME}.lnk"
 SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SecMain}    "출결 프로그램과 사용설명서 (필수)"
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "바탕화면에 '${APPNAME}' 아이콘을 만듭니다."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecStartup} "PC를 켜면 프로그램이 자동으로 열립니다. 13:30 지난주 리포트 자동 생성을 놓치지 않도록 권장합니다."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecStartup} "PC를 켜면 프로그램이 전체 화면(F11)으로 자동으로 열립니다. 13:30 지난주 리포트 자동 생성을 놓치지 않도록 권장합니다."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 Section "Uninstall"
@@ -131,7 +137,7 @@ Section "Uninstall"
   RMDir "${SMDIR}"
 
   DeleteRegKey HKCU "${UNINSTKEY}"
-  DeleteRegKey HKCU "Software\${APPKEY}"
+  DeleteRegKey HKCU "Software\${APPKEY}"   ; 설치 위치·브라우저 선택 기록
 
   MessageBox MB_ICONINFORMATION "프로그램을 제거했습니다.$\r$\n출결 데이터는 브라우저에 그대로 남아 있습니다."
 SectionEnd

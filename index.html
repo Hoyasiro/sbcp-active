@@ -3,14 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>삼성영어 셀레나 출결 데스크탑 — Acad-atd-03_1.6</title>
+<title>삼성영어 셀레나 출결 데스크탑 — Acad-atd-03_1.7</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="css/style.css">
 
 </head>
 <body>
+<button class="menu-btn" id="menuBtn" title="메뉴 열기" aria-label="메뉴 열기">☰</button>
 <div id="app">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
   <nav class="sidebar">
     <div class="side-brand">
@@ -35,7 +37,7 @@
       </button>
     </div>
     <div class="side-footer">
-      Desktop Edition v1.6
+      Desktop Edition v1.7
     </div>
   </nav>
 
@@ -94,7 +96,12 @@
         <div class="list-container board-container">
           <div class="list-header">
             <div class="list-title">지난주 리포트</div>
-            <div class="board-dots" id="boardDots"></div>
+            <div class="board-nav" id="boardNav">
+              <button class="bn-btn" id="boardPrevBtn" title="이전 친구" aria-label="이전">&lsaquo;</button>
+              <div class="board-dots" id="boardDots"></div>
+              <button class="bn-btn" id="boardNextBtn" title="다음 친구" aria-label="다음">&rsaquo;</button>
+              <button class="bn-btn bn-play" id="boardPlayBtn" title="잠시 멈춤" aria-label="잠시 멈춤">❚❚</button>
+            </div>
             <select class="board-select" id="boardSelect" aria-label="친구 선택"></select>
           </div>
           <div class="board-stack" id="boardCard"></div>
@@ -271,6 +278,40 @@
             <button class="holiday-fixed-btn" id="keyTestBtn">연결 테스트</button>
             <button class="hist-clear" id="keyDelBtn">키 삭제</button>
           </div>
+        </div>
+
+        <div class="set-group" style="width:100%; max-width:500px;">
+          <div class="set-title">🖥️ 화면 설정</div>
+          <div class="ui-row">
+            <span>사이드바 (왼쪽 메뉴)</span>
+            <div class="tone-group" data-ui="sidebar">
+              <button class="tone-btn" data-v="hidden">숨기기</button>
+              <button class="tone-btn" data-v="shown">항상 표시</button>
+            </div>
+          </div>
+          <div class="ui-row">
+            <span>시작할 때 전체 화면</span>
+            <div class="tone-group" data-ui="autoFull">
+              <button class="tone-btn" data-v="on">켜기</button>
+              <button class="tone-btn" data-v="off">끄기</button>
+            </div>
+          </div>
+          <div class="ui-row">
+            <span>화면 크기 맞춤</span>
+            <select id="uiScaleSelect">
+              <option value="auto">자동 (권장)</option>
+              <option value="1">100%</option>
+              <option value="0.9">90%</option>
+              <option value="0.8">80%</option>
+              <option value="0.7">70%</option>
+            </select>
+          </div>
+          <p class="holiday-desc" id="uiScaleInfo"></p>
+          <p class="holiday-desc">
+            • 사이드바를 숨기면 왼쪽 위 <b>☰</b> 버튼으로 메뉴를 엽니다.<br>
+            • 전체 화면은 설치 시 만든 바로가기로 켜면 바로 적용되고, 그 밖의 경우에는 첫 입력·클릭 때 전환됩니다. 나가기: <b>Esc</b> 또는 <b>F11</b>
+          </p>
+          <button class="holiday-fixed-btn" id="fullToggleBtn">⛶ 지금 전체 화면으로 전환</button>
         </div>
 
         <div class="set-group" style="width:100%; max-width:500px;">

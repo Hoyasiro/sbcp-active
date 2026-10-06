@@ -33,6 +33,7 @@ VIAddVersionKey /LANG=1042 "CompanyName" "${PUBLISHER}"
 VIAddVersionKey /LANG=1042 "LegalCopyright" "${PUBLISHER}"
 
 LoadLanguageFile "${NSISDIR}\Contrib\Language files\Korean.nlf"
+!include "common.nsh"
 
 ; 진행 막대 한 화면만 잠깐 보이고 닫힌다
 Page instfiles
@@ -48,11 +49,27 @@ Section
   File "/oname=사용설명서.html" "../build/manual.html"
   WriteRegStr HKCU "${UNINSTKEY}" "DisplayVersion" "${VERSION}"
 
+  ; 이미 있는 바로가기만 새 방식(브라우저 전체 화면 실행)으로 다시 만든다. 없는 바로가기는 새로 만들지 않는다.
+  Call SBCP_ChooseBrowser
+  ${If} ${FileExists} "$SMSTARTUP\${APPNAME}.lnk"
+    !insertmacro SBCP_Shortcut "$SMSTARTUP\${APPNAME}.lnk"
+  ${EndIf}
+  ${If} ${FileExists} "$DESKTOP\${APPNAME}.lnk"
+    !insertmacro SBCP_Shortcut "$DESKTOP\${APPNAME}.lnk"
+  ${EndIf}
+  ${If} ${FileExists} "$SMPROGRAMS\삼복출프\${APPNAME}.lnk"
+    !insertmacro SBCP_Shortcut "$SMPROGRAMS\삼복출프\${APPNAME}.lnk"
+  ${EndIf}
+
   MessageBox MB_YESNO|MB_ICONINFORMATION "v${VERSION} 업데이트가 끝났습니다.$\r$\n$\r$\n\
 출결 데이터와 설정은 그대로 유지됩니다.$\r$\n\
 이미 열려 있는 프로그램 창이 있다면 F5 키를 눌러 새로고침해 주세요.$\r$\n$\r$\n\
 지금 프로그램을 열까요?" IDNO done
-  ExecShell "open" "$INSTDIR\SBCP.html"
+  ${If} $BROWSER != ""
+    Exec '"$BROWSER" --start-fullscreen "$INSTDIR\SBCP.html"'
+  ${Else}
+    ExecShell "open" "$INSTDIR\SBCP.html"
+  ${EndIf}
   Goto done
 
 notInstalled:

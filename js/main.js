@@ -1,5 +1,5 @@
-// [v1.6 업데이트] 앱 버전 — 지난주 리포트 보드 3명 동시 표시, 업데이트 파일 지원
-var APP_VERSION = 'Acad-atd-03_1.6 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
+// [v1.7 업데이트] 앱 버전 — 사이드바 숨기기, 화면 자동 맞춤, 시작 시 전체 화면, 보드 일시정지·화살표
+var APP_VERSION = 'Acad-atd-03_1.7 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
 var STORAGE_KEY = 'acad-atd-03_1.4';
 
 var DEF_SETTINGS = { academyName:'삼성영어 셀레나', phone:'' };
@@ -176,6 +176,7 @@ function medalEmoji(i){
 
 // ===== 탭 이동 (사이드바) =====
 function goTab(n){
+  document.body.classList.remove('sidebar-open');   // 숨김 모드에서 펼친 메뉴는 고르는 즉시 닫는다
   document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
   document.querySelectorAll('.side-item').forEach(function(t){t.classList.remove('active');});
   document.getElementById('screen-'+n).classList.add('active');
@@ -186,7 +187,7 @@ function goTab(n){
     setTimeout(function(){document.getElementById('numInput').focus();},100);
   }
   if(n==='students') renderStudents();
-  if(n==='settings'){ loadSettings(); renderKeyStatus(); }
+  if(n==='settings'){ loadSettings(); renderKeyStatus(); renderUiSettings(); }
   if(n==='data'){ renderReportHistory('dataHistoryList', 50); renderBackupInfo(); }
   if(n==='report'){ fillStudentSelect(); renderReportHistory('reportHistoryList', 5); renderAutoStatus(); }
 }
@@ -1397,7 +1398,7 @@ async function generateReport(){
 
 document.addEventListener('DOMContentLoaded', function(){
   // 톤 선택 버튼
-  var toneBtns = document.querySelectorAll('.tone-btn');
+  var toneBtns = document.querySelectorAll('#screen-report .tone-btn');   // 설정 화면의 같은 모양 버튼과 섞이지 않게 범위를 좁힌다
   toneBtns.forEach(function(btn){
     btn.addEventListener('click', function(){
       toneBtns.forEach(function(b){ b.classList.remove('active'); });
@@ -1675,7 +1676,7 @@ var BOARD_SLOTS = 3;   // 한 번에 보여 주는 리포트 수 (1920×1080 기
 // 카드 높이에 맞춰 AI 문장 글자 크기를 정한다 (1920×1080에서 세 장이 꽉 차 보이도록).
 // 세 장 모두 들어가는 가장 큰 크기를 공통으로 쓰고, 최소 크기로도 넘치면 "…"로 줄인다.
 // 화면 크기·문장 길이마다 달라서 CSS 고정값 대신 실제 높이로 계산한다.
-var BOARD_FONT_MAX = 21, BOARD_FONT_MIN = 13;
+var BOARD_FONT_MAX = 24, BOARD_FONT_MIN = 13;
 function fitBoardText(){
   var els = Array.prototype.slice.call(document.querySelectorAll('#boardCard .board-card .lw-text'));
   if(!els.length || window.innerWidth <= 768) return;
@@ -1718,6 +1719,7 @@ function renderBoard(){
         ? '지난주는 전체 휴원이었어요. 이번 주 기록이 다음 주 보드에 올라옵니다!'
         : '아직 보드에 올릴 지난주 기록이 없어요.') + '</div>';
       if(dots) dots.innerHTML = '';
+      renderBoardControls();
       return;
     }
     _boardIdx = _boardIdx % list.length;
@@ -1732,6 +1734,7 @@ function renderBoard(){
   stack.classList.remove('slide'); void stack.offsetWidth; stack.classList.add('slide');
   fitBoardText();
 
+  renderBoardControls();
   if(!dots) return;
   if(_boardPinned){
     dots.innerHTML = '<span class="board-pin">📌 선택한 친구 · 잠시 후 순환</span>';
@@ -1748,12 +1751,79 @@ function renderBoard(){
 window.addEventListener('resize', function(){ clearTimeout(window._fitT); window._fitT = setTimeout(fitBoardText, 150); });
 
 function boardNext(){
-  if(_boardPinned) return;
+  if(_boardPinned || _boardPaused) return;
   var home = document.getElementById('screen-home');
   if(home && !home.classList.contains('active')) return;   // 다른 화면에서는 돌리지 않는다
   if(boardRotation().length <= BOARD_SLOTS) return;          // 모두 한 화면에 보이면 돌릴 필요 없음
   _boardIdx++;
   renderBoard();
+}
+
+// ----- 보드 조작: 이전·다음 화살표, 일시정지(❚❚)·재생(▶) -----
+// 일시정지 후 재생을 누르지 않으면 10초 뒤 저절로 다시 돈다 (공용 PC에 멈춘 채 방치되지 않도록).
+// 멈춘 동안 화살표를 누르면 "아직 읽는 중"으로 보고 10초를 다시 센다.
+var BOARD_PAUSE_MS = 10000;
+var _boardPaused = false, _boardPauseUntil = 0, _boardPauseTick = null;
+
+function restartBoardTimer(){
+  clearInterval(_boardTimer);
+  _boardTimer = setInterval(boardNext, BOARD_INTERVAL_MS);   // 손으로 넘긴 직후 바로 또 넘어가지 않게 4초를 새로 센다
+}
+
+function boardStep(d){
+  if(_boardPinned){                                          // 고정 중이면 풀고 순환 위치에서 이어 간다
+    clearTimeout(_boardResumeTimer);
+    var start = boardRotation().findIndex(function(s){ return s.id === _boardPinned; });
+    if(start > -1) _boardIdx = start;
+    _boardPinned = null;
+    var sel = document.getElementById('boardSelect');
+    if(sel) sel.value = '';
+  }
+  var n = boardRotation().length;
+  if(n > BOARD_SLOTS) _boardIdx = ((_boardIdx + d) % n + n) % n;
+  renderBoard();
+  restartBoardTimer();
+  if(_boardPaused) startPauseCountdown();
+}
+
+function pauseBoard(){
+  _boardPaused = true;
+  startPauseCountdown();
+}
+
+function startPauseCountdown(){
+  _boardPauseUntil = Date.now() + BOARD_PAUSE_MS;
+  clearInterval(_boardPauseTick);
+  _boardPauseTick = setInterval(function(){
+    if(Date.now() >= _boardPauseUntil) resumeBoard();
+    else renderBoardControls();
+  }, 250);
+  renderBoardControls();
+}
+
+function resumeBoard(){
+  _boardPaused = false;
+  clearInterval(_boardPauseTick);
+  restartBoardTimer();
+  renderBoardControls();
+}
+
+function renderBoardControls(){
+  var nav = document.getElementById('boardNav');
+  var play = document.getElementById('boardPlayBtn');
+  if(!nav || !play) return;
+  // 세 명 이하라 순환하지 않을 때는 조작 버튼을 감춘다
+  nav.classList.toggle('hidden', boardRotation().length <= BOARD_SLOTS);
+  if(_boardPaused){
+    var sec = Math.max(1, Math.ceil((_boardPauseUntil - Date.now()) / 1000));
+    play.textContent = '▶ ' + sec;
+    play.title = '다시 재생 (' + sec + '초 뒤 자동 재생)';
+    play.classList.add('paused');
+  } else {
+    play.textContent = '❚❚';
+    play.title = '잠시 멈춤';
+    play.classList.remove('paused');
+  }
 }
 
 function pinBoard(sidStr){
@@ -1781,7 +1851,13 @@ document.addEventListener('DOMContentLoaded', function(){
     });
   }
   renderBoard();
-  _boardTimer = setInterval(boardNext, BOARD_INTERVAL_MS);
+  restartBoardTimer();
+
+  // 버튼을 누른 뒤에도 다음 학생이 바로 번호를 칠 수 있게 입력칸으로 커서를 돌려 둔다
+  var backToInput = function(){ var input = document.getElementById('numInput'); if(input) setTimeout(function(){ input.focus(); }, 50); };
+  var prev = document.getElementById('boardPrevBtn');  if(prev) prev.addEventListener('click', function(){ boardStep(-1); backToInput(); });
+  var next = document.getElementById('boardNextBtn');  if(next) next.addEventListener('click', function(){ boardStep(1); backToInput(); });
+  var play = document.getElementById('boardPlayBtn');  if(play) play.addEventListener('click', function(){ _boardPaused ? resumeBoard() : pauseBoard(); backToInput(); });
 
   setTimeout(autoTick, 2000);
   setInterval(autoTick, 30000);
@@ -1877,7 +1953,7 @@ document.addEventListener('DOMContentLoaded', function(){
 // 업데이트 파일(SBCP_Update_*.exe)은 프로그램 파일만 바꾼다.
 // 새 버전으로 처음 열렸을 때 한 번만 알려 주어, 업데이트가 적용됐는지 눈으로 확인할 수 있게 한다.
 var LAST_VERSION_KEY = 'acad-last-version';
-var WHATS_NEW = '출결 데스크 지난주 리포트가 3명씩 보이도록 바뀌었습니다.';
+var WHATS_NEW = '사이드바는 왼쪽 위 ☰ 버튼으로 열고, 지난주 리포트는 ❚❚ 버튼으로 잠시 멈출 수 있습니다.';
 
 document.addEventListener('DOMContentLoaded', function(){
   var prev = null;
@@ -1886,4 +1962,106 @@ document.addEventListener('DOMContentLoaded', function(){
     var v = (APP_VERSION.match(/_(\d+\.\d+)/) || [])[1];
     setTimeout(function(){ showToast('✅ v' + v + ' 업데이트가 적용되었습니다. ' + WHATS_NEW); }, 2500);
   }
+});
+
+
+// ===== 화면 설정: 사이드바 숨기기 · 화면 자동 맞춤 · 시작 시 전체 화면 =====
+// 출결 데스크 PC 전용 화면 설정이라 출결 DB와 분리해 이 브라우저에만 저장한다 (백업 대상 아님).
+var UI_KEY = 'acad-ui';
+var UI_DEFAULT = { sidebar:'hidden', autoFull:'on', scale:'auto' };
+var UI = (function(){
+  try { return Object.assign({}, UI_DEFAULT, JSON.parse(localStorage.getItem(UI_KEY) || '{}')); }
+  catch(e){ return Object.assign({}, UI_DEFAULT); }
+})();
+function saveUi(){ try { localStorage.setItem(UI_KEY, JSON.stringify(UI)); } catch(e){} }
+
+// 자동 맞춤 기준 크기: 이 크기보다 작은 화면이면 전체를 비율대로 줄인다 (브라우저 "축소"를 자동으로 하는 것)
+// 높이 1080은 출결 데스크(랭킹 3칸·리포트 3장)가 스크롤 없이 들어가는 높이(1920×1080 설계 기준),
+// 폭은 사이드바를 숨기면 그만큼(260px) 덜 필요하다.
+var FIT_BASE_H = 1080, FIT_BASE_W_SIDEBAR = 1920, FIT_BASE_W_NOSIDEBAR = 1660;
+
+function currentZoom(){
+  if(window.innerWidth <= 768) return 1;                  // 모바일 배치는 따로 있으므로 건드리지 않는다
+  if(UI.scale !== 'auto') return Number(UI.scale) || 1;
+  var baseW = UI.sidebar === 'shown' ? FIT_BASE_W_SIDEBAR : FIT_BASE_W_NOSIDEBAR;
+  return Math.min(1, window.innerWidth / baseW, window.innerHeight / FIT_BASE_H);
+}
+
+function applyScale(){
+  var z = Math.round(currentZoom() * 1000) / 1000;
+  document.documentElement.style.zoom = (z === 1) ? '' : String(z);
+  document.documentElement.style.setProperty('--ui-zoom', String(z));
+  var info = document.getElementById('uiScaleInfo');
+  if(info) info.textContent = '현재 화면 ' + window.innerWidth + '×' + window.innerHeight + ' → ' + Math.round(z * 100) + '% 로 표시 중';
+}
+
+function applySidebar(){
+  document.body.classList.toggle('sidebar-hidden', UI.sidebar !== 'shown');
+  document.body.classList.remove('sidebar-open');
+}
+
+function renderUiSettings(){
+  document.querySelectorAll('[data-ui]').forEach(function(group){
+    var key = group.getAttribute('data-ui');
+    group.querySelectorAll('.tone-btn').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-v') === String(UI[key]));
+    });
+  });
+  var sel = document.getElementById('uiScaleSelect');
+  if(sel) sel.value = String(UI.scale);
+  applyScale();
+}
+
+// ----- 전체 화면 -----
+// 브라우저는 사용자의 클릭·키 입력 없이 웹페이지가 스스로 전체 화면이 되는 것을 막는다.
+// 그래서 (1) 설치 파일이 만든 바로가기가 브라우저를 --start-fullscreen 으로 켜고,
+//         (2) 그렇게 켜지지 않았을 때는 첫 키 입력·클릭 순간에 전체 화면으로 바꾼다 (한 번만).
+function isFullscreenLike(){
+  return !!document.fullscreenElement
+    || (Math.abs(window.innerWidth - screen.width) < 3 && Math.abs(window.innerHeight - screen.height) < 3);   // F11 상태
+}
+function enterFullscreen(){
+  var el = document.documentElement;
+  if(!isFullscreenLike() && el.requestFullscreen) el.requestFullscreen().catch(function(){});
+}
+var _autoFullTried = false;
+function autoFullscreenOnce(){
+  if(_autoFullTried) return;
+  _autoFullTried = true;                                   // Esc로 나간 뒤에는 다시 강제하지 않는다
+  if(UI.autoFull === 'on') enterFullscreen();
+}
+
+applySidebar();
+applyScale();
+
+window.addEventListener('resize', applyScale);
+document.addEventListener('keydown', autoFullscreenOnce, true);
+document.addEventListener('pointerdown', autoFullscreenOnce, true);
+
+document.addEventListener('DOMContentLoaded', function(){
+  var menu = document.getElementById('menuBtn');
+  if(menu) menu.addEventListener('click', function(){ document.body.classList.toggle('sidebar-open'); });
+  var backdrop = document.getElementById('sidebarBackdrop');
+  if(backdrop) backdrop.addEventListener('click', function(){ document.body.classList.remove('sidebar-open'); });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') document.body.classList.remove('sidebar-open'); });
+
+  document.querySelectorAll('[data-ui] .tone-btn').forEach(function(b){
+    b.addEventListener('click', function(){
+      var key = b.parentNode.getAttribute('data-ui');
+      UI[key] = b.getAttribute('data-v');
+      saveUi();
+      if(key === 'sidebar') applySidebar();
+      renderUiSettings();
+      setTimeout(fitBoardText, 300);
+    });
+  });
+  var sel = document.getElementById('uiScaleSelect');
+  if(sel) sel.addEventListener('change', function(){
+    UI.scale = this.value; saveUi(); renderUiSettings(); setTimeout(fitBoardText, 300);
+  });
+  var full = document.getElementById('fullToggleBtn');
+  if(full) full.addEventListener('click', function(){
+    if(document.fullscreenElement) document.exitFullscreen(); else enterFullscreen();
+  });
+  renderUiSettings();
 });

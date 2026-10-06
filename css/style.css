@@ -17,11 +17,11 @@
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 /* 데스크탑 환경 스크롤 방지 */
-body { font-family:'Noto Sans KR',sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; display:flex; }
+body { font-family:'Noto Sans KR',sans-serif; background:var(--bg); color:var(--text); height:calc(100vh / var(--ui-zoom, 1)); overflow:hidden; display:flex; }
 body::before { content:''; position:fixed; top:-150px; right:-150px; width:500px; height:500px; border-radius:50%; background:radial-gradient(circle,rgba(235,49,146,.12) 0%,transparent 70%); pointer-events:none; z-index:0; }
 body::after { content:''; position:fixed; bottom:-150px; left:-150px; width:450px; height:450px; border-radius:50%; background:radial-gradient(circle,rgba(90,197,191,.12) 0%,transparent 70%); pointer-events:none; z-index:0; }
 
-#app { position:relative; z-index:1; width:100%; display:flex; flex-direction:row; height:100vh; }
+#app { position:relative; z-index:1; width:100%; display:flex; flex-direction:row; height:calc(100vh / var(--ui-zoom, 1)); }
 
 /* ================= 사이드바 ================= */
 .sidebar { width:260px; background:var(--surface-glass); backdrop-filter:blur(12px); border-right:1px solid rgba(235,49,146,.15); display:flex; flex-direction:column; padding:30px 0; z-index:10; box-shadow:4px 0 24px rgba(235,49,146,.05); }
@@ -195,7 +195,7 @@ body::after { content:''; position:fixed; bottom:-150px; left:-150px; width:450p
 /* ================= 모달 (팝업) 공통 ================= */
 .mov { position:fixed; inset:0; background:rgba(5,5,93,.6); backdrop-filter:blur(4px); z-index:200; display:none; align-items:center; justify-content:center; }
 .mov.show { display:flex; animation:fadeIn .2s ease; }
-.msheet { background:var(--surface); border-radius:24px; padding:32px; width:100%; max-width:440px; max-height:90vh; overflow-y:auto; box-shadow:0 10px 40px rgba(0,0,0,.2); }
+.msheet { background:var(--surface); border-radius:24px; padding:32px; width:100%; max-width:440px; max-height:calc(90vh / var(--ui-zoom, 1)); overflow-y:auto; box-shadow:0 10px 40px rgba(0,0,0,.2); }
 .mtitle { font-size:22px; font-weight:900; color:var(--navy); margin-bottom:24px; }
 .mform { display:flex; flex-direction:column; gap:16px; }
 .mform .f label { display:block; font-size:12px; font-weight:700; color:var(--text2); margin-bottom:8px; }
@@ -543,7 +543,7 @@ body, .content-card, .list-container, .input-area,
 .lw-text { font-size:14px; line-height:1.7; color:var(--text); }
 .lw-pending, .lw-msg { font-size:13px; line-height:1.6; color:var(--text2); background:var(--gray); border-radius:12px; padding:12px 14px; }
 
-.record-card { max-height:92vh; overflow-y:auto; }
+.record-card { max-height:calc(92vh / var(--ui-zoom, 1)); overflow-y:auto; }
 .record-lastweek { background:var(--gray); border-radius:16px; padding:16px; margin-bottom:14px; }
 .record-lastweek .lw-stat { background:var(--surface); }
 .record-lastweek .lw-text { font-size:13px; }
@@ -572,3 +572,31 @@ body, .content-card, .list-container, .input-area,
   .board-stack { grid-template-rows:none; }
   .board-card .lw-text { display:block; -webkit-line-clamp:unset !important; }
 }
+
+/* ================= v1.7 화면 설정: 사이드바 숨기기 · 화면 맞춤 ================= */
+/* 화면 맞춤은 html에 zoom을 걸고(--ui-zoom), 100vh 높이는 그 배율로 나눠 화면을 꽉 채운다 */
+.menu-btn { display:none; position:fixed; top:14px; left:14px; z-index:80; width:42px; height:42px; border-radius:12px; border:1px solid var(--border); background:var(--surface-glass); backdrop-filter:blur(8px); color:var(--navy); font-size:20px; cursor:pointer; box-shadow:var(--shadow); align-items:center; justify-content:center; }
+.menu-btn:hover { color:var(--pink); }
+.sidebar-backdrop { display:none; }
+@media (min-width: 769px) {
+  body.sidebar-hidden .menu-btn { display:flex; }
+  body.sidebar-hidden.sidebar-open .menu-btn { display:none; }
+  body.sidebar-hidden .sidebar { position:fixed; top:0; left:0; bottom:0; height:calc(100vh / var(--ui-zoom, 1)); transform:translateX(-100%); transition:transform .25s ease; z-index:90; background:var(--surface); }
+  body.sidebar-hidden.sidebar-open .sidebar { transform:none; box-shadow:8px 0 40px rgba(5,5,93,.18); }
+  body.sidebar-hidden.sidebar-open .sidebar-backdrop { display:block; position:fixed; inset:0; z-index:85; background:rgba(5,5,93,.15); }
+  body.sidebar-hidden .main-content { padding-left:76px; }
+}
+
+/* 설정: 화면 */
+.ui-row { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; font-size:14px; font-weight:700; color:var(--navy); }
+.ui-row .tone-group { flex-shrink:0; }
+.ui-row select { padding:8px 12px; border-radius:10px; border:2px solid var(--border); background:var(--surface); color:var(--navy); font-size:14px; font-weight:700; font-family:'Noto Sans KR',sans-serif; }
+
+/* 지난주 리포트 보드: 이전·다음 화살표 + 일시정지/재생 */
+.board-nav { flex:1; display:flex; align-items:center; justify-content:center; gap:8px; min-width:0; }
+.board-nav.hidden { visibility:hidden; }
+.bn-btn { width:30px; height:30px; flex-shrink:0; border-radius:9px; border:1px solid var(--border); background:var(--surface); color:var(--navy); font-size:16px; font-weight:900; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; font-family:'Outfit','Noto Sans KR',sans-serif; }
+.bn-btn:hover { border-color:var(--pink); color:var(--pink); }
+.bn-play { width:auto; min-width:44px; padding:0 10px; margin-left:6px; font-size:12px; }
+.bn-play.paused { background:var(--pink); border-color:var(--pink); color:#fff; }
+.board-container .board-nav .board-dots { flex:0 1 auto; }
