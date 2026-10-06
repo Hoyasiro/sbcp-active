@@ -600,3 +600,20 @@ body, .content-card, .list-container, .input-area,
 .bn-play { width:auto; min-width:44px; padding:0 10px; margin-left:6px; font-size:12px; }
 .bn-play.paused { background:var(--pink); border-color:var(--pink); color:#fff; }
 .board-container .board-nav .board-dots { flex:0 1 auto; }
+
+/* ================= 설정 화면: 3열 균형 배치 ================= */
+/* 기본(학원 정보·AI) / 화면(화면 설정·테마) / 출결 기준(휴원일·연속 출결) — 관련 있는 것끼리 한 열에 묶는다 */
+.settings-card { overflow-y:auto; }
+.settings-wrap { margin:auto; width:100%; max-width:1480px; }   /* 내용이 짧으면 상하좌우 가운데, 길면 위에서부터 스크롤 */
+.settings-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:24px; align-items:start; }
+.set-col { display:flex; flex-direction:column; gap:24px; min-width:0; }
+.set-col .set-group { margin-bottom:0; }
+.set-save { width:100%; margin-top:4px; padding:13px; font-size:15px; }
+.settings-footer { display:flex; justify-content:center; margin-top:24px; }
+.settings-footer .app-version-box { margin-top:0; }
+@media (max-width: 1100px) and (min-width: 769px) {
+  .settings-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 768px) {
+  .settings-grid { grid-template-columns:1fr; }
+}

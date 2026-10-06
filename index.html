@@ -246,102 +246,111 @@
           <div class="page-sub">학원 기본 정보 및 시스템 환경 설정</div>
         </div>
       </div>
-      <div class="content-card" style="align-items:flex-start;">
-        <div class="set-group" style="width:100%; max-width:500px; padding:16px 24px;">
-          <div class="set-title" style="margin-bottom:8px;">🔥 연속 출결 기준 안내</div>
-          <div style="font-size:13px; color:var(--text2); line-height:1.6;">
-            연속 출결은 <b>주말(토·일)과 등록된 휴원일을 제외</b>하고 자동으로 계산됩니다.<br>
-            예) 금요일 출석 후 다음 월요일에 출석하면 연속 출석 유지.<br>
-            예) 수요일이 휴원일이면 화요일 → 목요일 출석도 연속으로 이어집니다.
-          </div>
-        </div>
+      <div class="content-card settings-card">
+        <div class="settings-wrap">
+          <div class="settings-grid">
+            <div class="set-col">
+            <div class="set-group">
+              <div class="set-title">🏫 학원 정보</div>
+              <div class="frow"><label>학원 이름</label><input type="text" id="cfgName" placeholder="예: 삼성영어 셀레나"></div>
+              <div class="frow"><label>연락처</label><input type="text" id="cfgPhone" placeholder="010-0000-0000" inputmode="numeric" oninput="fmtPhone(this)"></div>
+              <button class="save-btn set-save" onclick="saveSettings()">학원 정보 저장</button>
+            </div>
 
-        <div class="set-group" style="width:100%; max-width:500px;">
-          <div class="set-title">🏫 학원 정보</div>
-          <div class="frow"><label>학원 이름</label><input type="text" id="cfgName" placeholder="예: 삼성영어 셀레나"></div>
-          <div class="frow"><label>연락처</label><input type="text" id="cfgPhone" placeholder="010-0000-0000" inputmode="numeric" oninput="fmtPhone(this)"></div>
-        </div>
+            <div class="set-group">
+              <div class="set-title">🤖 AI 연결 (Gemini API 키)</div>
+              <p class="holiday-desc">
+                AI 리포트 문장을 만들 때 사용합니다. 키가 없어도 출결·통계·랭킹은 정상 동작합니다.<br>
+                키는 이 PC에만 저장되며 <b>백업 파일에는 포함되지 않습니다.</b>
+                키 발급 방법은 사용설명서를 참고하세요.
+              </p>
+              <div class="key-status" id="keyStatus"></div>
+              <div class="holiday-add">
+                <input type="password" id="keyInput" placeholder="AIza로 시작하는 키를 붙여 넣기" autocomplete="off">
+                <button class="holiday-btn" id="keySaveBtn">저장</button>
+              </div>
+              <div class="key-actions">
+                <button class="holiday-fixed-btn" id="keyTestBtn">연결 테스트</button>
+                <button class="hist-clear" id="keyDelBtn">키 삭제</button>
+              </div>
+            </div>
+            </div>
+            <div class="set-col">
+            <div class="set-group">
+              <div class="set-title">🖥️ 화면 설정</div>
+              <div class="ui-row">
+                <span>사이드바 (왼쪽 메뉴)</span>
+                <div class="tone-group" data-ui="sidebar">
+                  <button class="tone-btn" data-v="hidden">숨기기</button>
+                  <button class="tone-btn" data-v="shown">항상 표시</button>
+                </div>
+              </div>
+              <div class="ui-row">
+                <span>시작할 때 전체 화면</span>
+                <div class="tone-group" data-ui="autoFull">
+                  <button class="tone-btn" data-v="on">켜기</button>
+                  <button class="tone-btn" data-v="off">끄기</button>
+                </div>
+              </div>
+              <div class="ui-row">
+                <span>화면 크기 맞춤</span>
+                <select id="uiScaleSelect">
+                  <option value="auto">자동 (권장)</option>
+                  <option value="1">100%</option>
+                  <option value="0.9">90%</option>
+                  <option value="0.8">80%</option>
+                  <option value="0.7">70%</option>
+                </select>
+              </div>
+              <p class="holiday-desc" id="uiScaleInfo"></p>
+              <p class="holiday-desc">
+                • 사이드바를 숨기면 왼쪽 위 <b>☰</b> 버튼으로 메뉴를 엽니다.<br>
+                • 전체 화면은 설치 시 만든 바로가기로 켜면 바로 적용되고, 그 밖의 경우에는 첫 입력·클릭 때 전환됩니다. 나가기: <b>Esc</b> 또는 <b>F11</b>
+              </p>
+              <button class="holiday-fixed-btn" id="fullToggleBtn">⛶ 지금 전체 화면으로 전환</button>
+            </div>
 
-        <div class="set-group" style="width:100%; max-width:500px;">
-          <div class="set-title">🤖 AI 연결 (Gemini API 키)</div>
-          <p class="holiday-desc">
-            AI 리포트 문장을 만들 때 사용합니다. 키가 없어도 출결·통계·랭킹은 정상 동작합니다.<br>
-            키는 이 PC에만 저장되며 <b>백업 파일에는 포함되지 않습니다.</b>
-            키 발급 방법은 사용설명서를 참고하세요.
-          </p>
-          <div class="key-status" id="keyStatus"></div>
-          <div class="holiday-add">
-            <input type="password" id="keyInput" placeholder="AIza로 시작하는 키를 붙여 넣기" autocomplete="off">
-            <button class="holiday-btn" id="keySaveBtn">저장</button>
-          </div>
-          <div class="key-actions">
-            <button class="holiday-fixed-btn" id="keyTestBtn">연결 테스트</button>
-            <button class="hist-clear" id="keyDelBtn">키 삭제</button>
-          </div>
-        </div>
+            <div class="set-group">
+              <div class="set-title">🎨 화면 테마</div>
+              <p class="holiday-desc">
+                어두운 환경에서 눈의 피로를 줄이려면 다크 모드를 사용하세요. 선택한 테마는 저장됩니다.
+              </p>
+              <button class="theme-btn" id="themeBtn">🌙 다크 모드로 전환</button>
+            </div>
+            </div>
+            <div class="set-col">
+            <div class="set-group">
+              <div class="set-title">📅 휴원일 관리</div>
+              <p class="holiday-desc">
+                공휴일·자체 휴강일을 등록하면 출석률 계산에서 제외됩니다.
+              </p>
+              <div class="holiday-add">
+                <input type="date" id="holidayInput">
+                <button class="holiday-btn" id="holidayAddBtn">추가</button>
+              </div>
+              <button class="holiday-fixed-btn" id="holidayFixedBtn">
+                올해 공휴일 한 번에 등록
+              </button>
+              <div class="holiday-list" id="holidayList"></div>
+            </div>
 
-        <div class="set-group" style="width:100%; max-width:500px;">
-          <div class="set-title">🖥️ 화면 설정</div>
-          <div class="ui-row">
-            <span>사이드바 (왼쪽 메뉴)</span>
-            <div class="tone-group" data-ui="sidebar">
-              <button class="tone-btn" data-v="hidden">숨기기</button>
-              <button class="tone-btn" data-v="shown">항상 표시</button>
+            <div class="set-group">
+              <div class="set-title">🔥 연속 출결 기준 안내</div>
+              <div style="font-size:13px; color:var(--text2); line-height:1.6;">
+                연속 출결은 <b>주말(토·일)과 등록된 휴원일을 제외</b>하고 자동으로 계산됩니다.<br>
+                예) 금요일 출석 후 다음 월요일에 출석하면 연속 출석 유지.<br>
+                예) 수요일이 휴원일이면 화요일 → 목요일 출석도 연속으로 이어집니다.
+              </div>
+            </div>
             </div>
           </div>
-          <div class="ui-row">
-            <span>시작할 때 전체 화면</span>
-            <div class="tone-group" data-ui="autoFull">
-              <button class="tone-btn" data-v="on">켜기</button>
-              <button class="tone-btn" data-v="off">끄기</button>
+          <div class="settings-footer">
+            <div class="app-version-box" id="appVersionBox">
+              ℹ️ 현재 시스템 버전: <b id="appVersionText">-</b>
             </div>
           </div>
-          <div class="ui-row">
-            <span>화면 크기 맞춤</span>
-            <select id="uiScaleSelect">
-              <option value="auto">자동 (권장)</option>
-              <option value="1">100%</option>
-              <option value="0.9">90%</option>
-              <option value="0.8">80%</option>
-              <option value="0.7">70%</option>
-            </select>
-          </div>
-          <p class="holiday-desc" id="uiScaleInfo"></p>
-          <p class="holiday-desc">
-            • 사이드바를 숨기면 왼쪽 위 <b>☰</b> 버튼으로 메뉴를 엽니다.<br>
-            • 전체 화면은 설치 시 만든 바로가기로 켜면 바로 적용되고, 그 밖의 경우에는 첫 입력·클릭 때 전환됩니다. 나가기: <b>Esc</b> 또는 <b>F11</b>
-          </p>
-          <button class="holiday-fixed-btn" id="fullToggleBtn">⛶ 지금 전체 화면으로 전환</button>
         </div>
-
-        <div class="set-group" style="width:100%; max-width:500px;">
-          <div class="set-title">🎨 화면 테마</div>
-          <p class="holiday-desc">
-            어두운 환경에서 눈의 피로를 줄이려면 다크 모드를 사용하세요. 선택한 테마는 저장됩니다.
-          </p>
-          <button class="theme-btn" id="themeBtn">🌙 다크 모드로 전환</button>
-        </div>
-
-        <div class="set-group" style="width:100%; max-width:500px;">
-          <div class="set-title">📅 휴원일 관리</div>
-          <p class="holiday-desc">
-            공휴일·자체 휴강일을 등록하면 출석률 계산에서 제외됩니다.
-          </p>
-          <div class="holiday-add">
-            <input type="date" id="holidayInput">
-            <button class="holiday-btn" id="holidayAddBtn">추가</button>
-          </div>
-          <button class="holiday-fixed-btn" id="holidayFixedBtn">
-            올해 공휴일 한 번에 등록
-          </button>
-          <div class="holiday-list" id="holidayList"></div>
-        </div>
-        
-        <button class="save-btn" onclick="saveSettings()">설정 저장</button>
-
-        <div class="app-version-box" id="appVersionBox">
-          ℹ️ 현재 시스템 버전: <b id="appVersionText">-</b>
-        </div>
+      </div>
       </div>
     </div>
 
