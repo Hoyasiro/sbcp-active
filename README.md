@@ -95,13 +95,16 @@ sbcp-active/
 ├── js/main.js              출결·집계·AI 호출·보드 로직
 ├── docs/
 │   ├── 사용설명서.md        사용자용 설명서 (설치 파일에 HTML로 포함)
-│   └── 서비스기획서.md      기능 명세
+│   ├── 서비스기획서.md      기능 명세
+│   └── 인수인계서.md        다른 계정·담당자에게 넘길 때 읽는 문서 (현재 상태·구조·릴리즈 절차·주의사항)
 ├── installer/
 │   ├── sbcp.nsi            처음 설치용 스크립트 (NSIS)
 │   ├── sbcp_update.nsi     업데이트용 스크립트 (프로그램 파일만 교체)
 │   ├── common.nsh          공통: 브라우저 찾기 + 전체 화면 바로가기
 │   └── sbcp.ico            아이콘
-├── tools/build.py          설치 파일 빌드
+├── tools/
+│   ├── build.py            설치 파일 빌드
+│   └── poster/             학생명단포스터(A4 PDF) 생성기 — 실제 명단은 data/ 에만 (인수인계서 8절)
 └── release/
     ├── SBCP_Setup_v1.7.exe  처음 설치용
     └── SBCP_Update_v1.7.exe 업데이트용
