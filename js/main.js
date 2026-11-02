@@ -1,5 +1,5 @@
-// [v1.7 업데이트] 앱 버전 — 사이드바 숨기기, 화면 자동 맞춤, 시작 시 전체 화면, 보드 일시정지·화살표
-var APP_VERSION = 'Acad-atd-03_1.7 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
+// [v1.8 업데이트] 앱 버전 — 화면 자동 맞춤이 큰 모니터(3160×1680 등)에서는 확대도 함
+var APP_VERSION = 'Acad-atd-03_1.8 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
 var STORAGE_KEY = 'acad-atd-03_1.4';
 
 var DEF_SETTINGS = { academyName:'삼성영어 셀레나', phone:'' };
@@ -1927,7 +1927,7 @@ document.addEventListener('DOMContentLoaded', function(){
 // 업데이트 파일(SBCP_Update_*.exe)은 프로그램 파일만 바꾼다.
 // 새 버전으로 처음 열렸을 때 한 번만 알려 주어, 업데이트가 적용됐는지 눈으로 확인할 수 있게 한다.
 var LAST_VERSION_KEY = 'acad-last-version';
-var WHATS_NEW = '사이드바는 왼쪽 위 ☰ 버튼으로 열고, 지난주 리포트는 ❚❚ 버튼으로 잠시 멈출 수 있습니다.';
+var WHATS_NEW = '큰 모니터에서는 화면이 자동으로 커져 꽉 차게 표시됩니다.';
 
 document.addEventListener('DOMContentLoaded', function(){
   var prev = null;
@@ -1949,16 +1949,18 @@ var UI = (function(){
 })();
 function saveUi(){ try { localStorage.setItem(UI_KEY, JSON.stringify(UI)); } catch(e){} }
 
-// 자동 맞춤 기준 크기: 이 크기보다 작은 화면이면 전체를 비율대로 줄인다 (브라우저 "축소"를 자동으로 하는 것)
+// 자동 맞춤 기준 크기: 화면 전체를 이 크기에 맞춰 비율대로 줄이거나(작은 모니터) 키운다(큰 모니터, v1.8~)
+// 예) 1600×900 → 약 83%, 1920×1080 → 100%, 3160×1680 → 약 156%
 // 높이 1080은 출결 데스크(랭킹 3칸·리포트 3장)가 스크롤 없이 들어가는 높이(1920×1080 설계 기준),
 // 폭은 사이드바를 숨기면 그만큼(260px) 덜 필요하다.
 var FIT_BASE_H = 1080, FIT_BASE_W_SIDEBAR = 1920, FIT_BASE_W_NOSIDEBAR = 1660;
+var FIT_MAX_ZOOM = 2;   // 자동 확대 상한 (4K 같은 아주 큰 화면에서 지나치게 커지지 않도록)
 
 function currentZoom(){
   if(window.innerWidth <= 768) return 1;                  // 모바일 배치는 따로 있으므로 건드리지 않는다
   if(UI.scale !== 'auto') return Number(UI.scale) || 1;
   var baseW = UI.sidebar === 'shown' ? FIT_BASE_W_SIDEBAR : FIT_BASE_W_NOSIDEBAR;
-  return Math.min(1, window.innerWidth / baseW, window.innerHeight / FIT_BASE_H);
+  return Math.min(FIT_MAX_ZOOM, window.innerWidth / baseW, window.innerHeight / FIT_BASE_H);
 }
 
 function applyScale(){
