@@ -535,15 +535,18 @@ function importBackup(event) {
 // ===== 설정 =====
 function loadSettings(){
   var s=DB.settings;
-  document.getElementById('cfgName').value=s.academyName||'';
-  document.getElementById('cfgPhone').value=s.phone||'';
+  // 학원 정보 입력칸은 화면에서 빠졌을 수 있으므로 있을 때만 채운다
+  var nameEl=document.getElementById('cfgName'), phoneEl=document.getElementById('cfgPhone');
+  if(nameEl) nameEl.value=s.academyName||'';
+  if(phoneEl) phoneEl.value=s.phone||'';
   var vText = document.getElementById('appVersionText');
   if(vText) vText.textContent = APP_VERSION;
   renderHolidays();
 }
 function saveSettings(){
-  DB.settings.academyName=document.getElementById('cfgName').value.trim()||'학원';
-  DB.settings.phone=document.getElementById('cfgPhone').value.trim();
+  var nameEl=document.getElementById('cfgName'), phoneEl=document.getElementById('cfgPhone');
+  if(nameEl) DB.settings.academyName=nameEl.value.trim()||'학원';
+  if(phoneEl) DB.settings.phone=phoneEl.value.trim();
   save();showToast('✅ 설정이 저장되었습니다.');
 }
 
