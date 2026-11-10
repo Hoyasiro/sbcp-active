@@ -1,5 +1,5 @@
-// [v1.8 업데이트] 앱 버전 — 화면 자동 맞춤이 큰 모니터(3160×1680 등)에서는 확대도 함
-var APP_VERSION = 'Acad-atd-03_1.8 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
+// [v1.9 업데이트] 앱 버전 — 출결 데스크 오른쪽 원생 명단, 빼빼로데이(2026-11-11) 등원 축하 문구
+var APP_VERSION = 'Acad-atd-03_1.9 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
 var STORAGE_KEY = 'acad-atd-03_1.4';
 
 var DEF_SETTINGS = { academyName:'삼성영어 셀레나', phone:'' };
@@ -161,7 +161,7 @@ function goTab(n){
   document.getElementById('tab-'+n).classList.add('active');
   
   if(n==='home'){
-    renderRecent(); renderRank3Group(); renderBoard();
+    renderRecent(); renderRank3Group(); renderBoard(); renderRoster();
     setTimeout(function(){document.getElementById('numInput').focus();},100);
   }
   if(n==='students') renderStudents();
@@ -202,6 +202,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // 최초 로드 시 포커스
   renderRecent();
   renderRank3Group();
+  renderRoster();
   setTimeout(function(){input.focus();}, 100);
   
   // 화면 클릭 시 항상 입력창 포커스 복귀 (홈 화면일때만)
@@ -265,6 +266,12 @@ function processAttend(no){
   setTimeout(function(){input.focus();},100);
 }
 
+// ===== 빼빼로데이 (2026-11-11 하루만) =====
+// 이 날짜에 등원 체크를 하면 등원 팝업 맨 위에 축하 문구를 보여 준다.
+// PC 날짜가 바뀌면 저절로 꺼지므로 다음 날 따로 되돌릴 것이 없다. (다음 버전에서 이 구역을 지워도 됨)
+var PEPERO_DAY = '2026-11-11';
+function isPeperoDay(){ return today() === PEPERO_DAY; }
+
 // ===== 기록 팝업 =====
 function openRecordPopup(sid, isNewBest){
   var s = DB.students.find(function(x){return x.id===sid;});
@@ -286,6 +293,11 @@ function openRecordPopup(sid, isNewBest){
   document.getElementById('recMonthRank').textContent = monthRank ? (monthRank+'위 / '+DB.students.length+'명') : '-';
   document.getElementById('recStreakRank').textContent = streakRank ? (streakRank+'위 / '+DB.students.length+'명') : '-';
   document.getElementById('recLastWeek').innerHTML = lastWeekHtml(sid, true);
+
+  var pepero = isPeperoDay();
+  document.getElementById('peperoBanner').hidden = !pepero;
+  document.getElementById('recordCard').classList.toggle('pepero', pepero);
+  document.getElementById('recordCard').scrollTop = 0;
 
   document.getElementById('recordMov').classList.add('show');
 }
@@ -379,8 +391,46 @@ function renderRank3Group(){
   }).join('');
 }
 
+// ===== 원생 명단 (출결 데스크 오른쪽) =====
+// 번호 + 이름을 번호순으로 늘 보여 준다. 학생을 추가·수정·삭제하면 그 자리에서 다시 그린다.
+// 스크롤 없이 한눈에 보이도록 인원에 따라 열 수를 정하고, 줄 높이·글자 크기를 칸 높이에 맞춘다.
+var ROSTER_ROW_MAX = 44, ROSTER_ROW_MIN = 22;   // 한 줄 높이(px) 범위
+function escHtml(s){
+  return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+}
+function rosterCols(n){ return n <= 14 ? 1 : (n <= 56 ? 2 : 3); }
+function renderRoster(){
+  var list = document.getElementById('rosterList');
+  if(!list) return;
+  var sorted = [].concat(DB.students).sort(function(a,b){ return a.no.localeCompare(b.no); });
+  document.getElementById('rosterCount').textContent = sorted.length + '명';
+  document.getElementById('rosterPanel').setAttribute('data-cols', rosterCols(sorted.length));
+  if(!sorted.length){
+    list.innerHTML = '<div class="roster-empty">등록된 원생이 없습니다</div>';
+    return;
+  }
+  list.innerHTML = sorted.map(function(s){
+    return '<div class="roster-item"><span class="roster-no">' + escHtml(s.no) + '</span>'
+      + '<span class="roster-name">' + escHtml(s.name) + '</span></div>';
+  }).join('');
+  fitRoster();
+}
+function fitRoster(){
+  var list = document.getElementById('rosterList');
+  if(!list || !list.children.length || list.querySelector('.roster-empty')) return;
+  var n = list.children.length, cols = rosterCols(n), rows = Math.ceil(n / cols);
+  list.style.setProperty('--roster-cols', cols);
+  list.style.setProperty('--roster-rows', rows);
+  if(window.innerWidth <= 768){ list.style.removeProperty('--roster-row'); return; }
+  if(!list.clientHeight) return;   // 다른 탭이 열려 있어 보이지 않는 동안에는 잴 수 없다 (출결 데스크로 돌아올 때 다시 맞춤)   // 모바일은 가로로 채우고 길이는 내용만큼
+  var h = Math.max(ROSTER_ROW_MIN, Math.min(ROSTER_ROW_MAX, Math.floor(list.clientHeight / rows)));
+  list.style.setProperty('--roster-row', h + 'px');
+}
+window.addEventListener('resize', function(){ setTimeout(fitRoster, 50); });
+
 // ===== 학생 관리 =====
 function renderStudents(){
+  renderRoster();   // 학생 목록이 바뀌는 모든 경로(추가·수정·삭제)가 이 함수를 거친다
   var list=document.getElementById('stuList');
   document.getElementById('stuCount').textContent=DB.students.length+'명';
   if(!DB.students.length){list.innerHTML='<div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--text2);">등록된 학생이 없습니다.</div>';return;}
@@ -1927,7 +1977,7 @@ document.addEventListener('DOMContentLoaded', function(){
 // 업데이트 파일(SBCP_Update_*.exe)은 프로그램 파일만 바꾼다.
 // 새 버전으로 처음 열렸을 때 한 번만 알려 주어, 업데이트가 적용됐는지 눈으로 확인할 수 있게 한다.
 var LAST_VERSION_KEY = 'acad-last-version';
-var WHATS_NEW = '큰 모니터에서는 화면이 자동으로 커져 꽉 차게 표시됩니다.';
+var WHATS_NEW = '출결 데스크 오른쪽에 원생 명단(번호·이름)이 항상 표시됩니다.';
 
 document.addEventListener('DOMContentLoaded', function(){
   var prev = null;
@@ -2028,12 +2078,12 @@ document.addEventListener('DOMContentLoaded', function(){
       saveUi();
       if(key === 'sidebar') applySidebar();
       renderUiSettings();
-      setTimeout(fitBoardText, 300);
+      setTimeout(function(){ fitBoardText(); fitRoster(); }, 300);
     });
   });
   var sel = document.getElementById('uiScaleSelect');
   if(sel) sel.addEventListener('change', function(){
-    UI.scale = this.value; saveUi(); renderUiSettings(); setTimeout(fitBoardText, 300);
+    UI.scale = this.value; saveUi(); renderUiSettings(); setTimeout(function(){ fitBoardText(); fitRoster(); }, 300);
   });
   var full = document.getElementById('fullToggleBtn');
   if(full) full.addEventListener('click', function(){

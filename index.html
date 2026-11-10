@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>삼성영어 셀레나 출결 데스크탑 — Acad-atd-03_1.8</title>
+<title>삼성영어 셀레나 출결 데스크탑 — Acad-atd-03_1.9</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="css/style.css">
@@ -37,13 +37,14 @@
       </button>
     </div>
     <div class="side-footer">
-      Desktop Edition v1.8
+      Desktop Edition v1.9
     </div>
   </nav>
 
   <main class="main-content">
     
     <div class="screen active" id="screen-home">
+      <div class="home-main">
       <div class="page-header">
         <div>
           <div class="page-title">출결 데스크</div>
@@ -107,6 +108,15 @@
           <div class="board-stack" id="boardCard"></div>
         </div>
       </div>
+      </div>
+
+      <aside class="list-container roster-panel" id="rosterPanel">
+        <div class="list-header">
+          <div class="list-title">원생 명단</div>
+          <span class="roster-count" id="rosterCount"></span>
+        </div>
+        <div class="roster-list" id="rosterList"></div>
+      </aside>
     </div>
 
     <div class="screen" id="screen-students">
@@ -385,7 +395,14 @@
 </div>
 
 <div class="mov" id="recordMov" onclick="if(event.target===this)closeMov('recordMov')">
-  <div class="record-card">
+  <div class="record-card" id="recordCard">
+    <div class="pepero-banner" id="peperoBanner" hidden>
+      <div class="pepero-hearts" aria-hidden="true"><span>♥</span><span>♥</span><span>♥</span><span>♥</span><span>♥</span><span>♥</span></div>
+      <div class="pepero-sticks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="pepero-date">11 · 11</div>
+      <div class="pepero-title">Happy <b>빼빼로</b> Day!</div>
+      <div class="pepero-msg">원장님을 찾아가 <b>빼빼로</b>를 받아가요~</div>
+    </div>
     <div class="record-hero">
       <div class="record-emoji" id="recEmoji">🎉</div>
       <div class="record-name" id="recName"></div>
