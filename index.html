@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>삼성영어 셀레나 출결 데스크탑 — Acad-atd-03_2.0</title>
+<title>삼성영어 셀레나 출결 데스크탑 — Acad-atd-03_2.1</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="css/style.css">
@@ -37,7 +37,7 @@
       </button>
     </div>
     <div class="side-footer">
-      Desktop Edition v2.0
+      Desktop Edition v2.1
     </div>
   </nav>
 
@@ -310,9 +310,10 @@
                 </div>
               </div>
               <div class="ui-row voice-row">
-                <span class="voice-status" id="voiceStatus"></span>
+                <select id="voiceSelect" class="voice-select" aria-label="목소리 선택"></select>
                 <button class="holiday-fixed-btn voice-test" id="voiceTestBtn">🔊 들어 보기</button>
               </div>
+              <p class="holiday-desc voice-status" id="voiceStatus"></p>
               <div class="ui-row">
                 <span>화면 크기 맞춤</span>
                 <select id="uiScaleSelect">

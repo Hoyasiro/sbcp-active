@@ -1,5 +1,5 @@
-// [v2.0 업데이트] 앱 버전 — 등·하원 음성 안내 (빼빼로데이 2026-11-11에는 축하 멘트 추가)
-var APP_VERSION = 'Acad-atd-03_2.0 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
+// [v2.1 업데이트] 앱 버전 — 음성 안내를 여성 목소리로 (목소리 직접 선택 가능)
+var APP_VERSION = 'Acad-atd-03_2.1 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
 var STORAGE_KEY = 'acad-atd-03_1.4';
 
 var DEF_SETTINGS = { academyName:'삼성영어 셀레나', phone:'' };
@@ -290,11 +290,31 @@ function checkoutVoiceText(s, stayMin){
   return s.name + ' 학생, 하원했습니다. 오늘 ' + stayMin + '분 공부했어요. 안녕히 가세요.';
 }
 
+// 여성 목소리 고르기 (v2.1): 브라우저는 목소리의 성별을 알려 주지 않아 이름으로 가린다.
+//   여성: Heami(윈도우 기본), SunHi·JiMin·SeoHyeon·YuJin 등(엣지 온라인), Google 한국의(크롬 온라인), Yuna(맥)
+//   남성: InJoon·BongJin·GookMin·Hyunsu 등 → 자동 선택에서 제외
+// 이름을 모르는 목소리는 여성 다음 순위로 둔다. 설정에서 목소리를 직접 고르면 그 선택이 우선한다.
+var VOICE_FEMALE = /heami|sun-?hi|ji-?min|seo-?hyeon|soon-?bok|yu-?jin|yuna|google|female|여성/i;
+var VOICE_MALE   = /in-?joon|bong-?jin|gook-?min|hyun-?su|male|남성/i;
+function koreanVoices(){
+  if(!window.speechSynthesis) return [];
+  return speechSynthesis.getVoices().filter(function(v){ return /^ko([-_]|$)/i.test(v.lang); });
+}
+function voiceGender(v){
+  if(VOICE_MALE.test(v.name) && !/female/i.test(v.name)) return 'male';
+  return VOICE_FEMALE.test(v.name) ? 'female' : 'unknown';
+}
 function koreanVoice(){
-  if(!window.speechSynthesis) return null;
-  var vs = speechSynthesis.getVoices().filter(function(v){ return /^ko([-_]|$)/i.test(v.lang); });
-  // 같은 한국어라도 PC에 설치된 음성(오프라인)을 먼저 쓴다 — 인터넷이 끊겨도 소리가 나도록
-  return vs.filter(function(v){ return v.localService; })[0] || vs[0] || null;
+  var vs = koreanVoices();
+  if(UI.voiceName){
+    var chosen = vs.filter(function(v){ return v.name === UI.voiceName; })[0];
+    if(chosen) return chosen;
+  }
+  // 여성 → 성별 모름 → (어쩔 수 없을 때만) 남성. 같은 순위에서는 PC에 설치된 음성(인터넷 없이도 소리 남)을 먼저.
+  var rank = { female:0, unknown:1, male:2 };
+  return vs.slice().sort(function(a, b){
+    return (rank[voiceGender(a)] - rank[voiceGender(b)]) || ((b.localService ? 1 : 0) - (a.localService ? 1 : 0));
+  })[0] || null;
 }
 function speak(text, force){
   if(!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
@@ -309,12 +329,22 @@ function speak(text, force){
     return true;
   } catch(e){ console.error('음성 안내 실패:', e); return false; }
 }
+function shortVoiceName(v){ return v.name.replace(/^Microsoft\s+/, '').replace(/\s*-\s*Korean.*$/, ''); }
 function renderVoiceStatus(){
-  var el = document.getElementById('voiceStatus');
-  if(!el) return;
-  if(!window.speechSynthesis){ el.textContent = '이 브라우저는 음성 안내를 지원하지 않습니다.'; return; }
+  var el = document.getElementById('voiceStatus'), sel = document.getElementById('voiceSelect');
+  if(!el || !sel) return;
+  if(!window.speechSynthesis){ sel.innerHTML = '<option>지원 안 함</option>'; sel.disabled = true; el.textContent = '이 브라우저는 음성 안내를 지원하지 않습니다.'; return; }
+  var vs = koreanVoices(), label = { female:'여성', male:'남성', unknown:'' };
+  sel.innerHTML = '<option value="">자동 (여성 목소리)</option>' + vs.map(function(v){
+    var g = label[voiceGender(v)];
+    return '<option value="' + escHtml(v.name) + '">' + escHtml(shortVoiceName(v)) + (g ? ' · ' + g : '') + '</option>';
+  }).join('');
+  sel.value = vs.some(function(v){ return v.name === UI.voiceName; }) ? UI.voiceName : '';
   var v = koreanVoice();
-  el.textContent = v ? ('목소리: ' + v.name) : '한국어 음성을 찾지 못했습니다. (윈도우 설정 → 시간 및 언어 → 음성에서 한국어 추가)';
+  // 한 줄을 넘기면 설정 화면이 스크롤되므로 짧게 쓴다
+  if(!v) el.textContent = '• 한국어 음성 없음 — 윈도우 설정 → 시간 및 언어 → 음성에서 추가';
+  else if(voiceGender(v) === 'male') el.textContent = '• 이 PC에는 남성 목소리만 있습니다: ' + shortVoiceName(v);
+  else el.textContent = '• 사용 중인 목소리: ' + shortVoiceName(v);
 }
 if(window.speechSynthesis){
   speechSynthesis.getVoices();                     // 음성 목록은 늦게 채워지므로 미리 불러 둔다
@@ -2026,7 +2056,7 @@ document.addEventListener('DOMContentLoaded', function(){
 // 업데이트 파일(SBCP_Update_*.exe)은 프로그램 파일만 바꾼다.
 // 새 버전으로 처음 열렸을 때 한 번만 알려 주어, 업데이트가 적용됐는지 눈으로 확인할 수 있게 한다.
 var LAST_VERSION_KEY = 'acad-last-version';
-var WHATS_NEW = '등·하원 체크를 하면 음성으로 안내합니다. (설정 → 화면 설정에서 끌 수 있음)';
+var WHATS_NEW = '등·하원 체크를 하면 여성 목소리로 안내합니다. (설정 → 화면 설정에서 끄거나 목소리 변경)';
 
 document.addEventListener('DOMContentLoaded', function(){
   var prev = null;
@@ -2041,7 +2071,7 @@ document.addEventListener('DOMContentLoaded', function(){
 // ===== 화면 설정: 사이드바 숨기기 · 화면 자동 맞춤 · 시작 시 전체 화면 =====
 // 출결 데스크 PC 전용 화면 설정이라 출결 DB와 분리해 이 브라우저에만 저장한다 (백업 대상 아님).
 var UI_KEY = 'acad-ui';
-var UI_DEFAULT = { sidebar:'hidden', autoFull:'on', scale:'auto', voice:'on' };
+var UI_DEFAULT = { sidebar:'hidden', autoFull:'on', scale:'auto', voice:'on', voiceName:'' };   // voiceName '' = 자동(여성 목소리)
 var UI = (function(){
   try { return Object.assign({}, UI_DEFAULT, JSON.parse(localStorage.getItem(UI_KEY) || '{}')); }
   catch(e){ return Object.assign({}, UI_DEFAULT); }
@@ -2135,6 +2165,8 @@ document.addEventListener('DOMContentLoaded', function(){
   if(sel) sel.addEventListener('change', function(){
     UI.scale = this.value; saveUi(); renderUiSettings(); setTimeout(function(){ fitBoardText(); fitRoster(); }, 300);
   });
+  var vsel = document.getElementById('voiceSelect');
+  if(vsel) vsel.addEventListener('change', function(){ UI.voiceName = this.value; saveUi(); renderVoiceStatus(); });
   var vt = document.getElementById('voiceTestBtn');
   if(vt) vt.addEventListener('click', function(){
     if(!speak(checkinVoiceText({name:'홍길동'}, 3, false), true)) showToast('이 브라우저에서는 음성 안내를 쓸 수 없습니다.');

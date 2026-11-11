@@ -13,8 +13,8 @@ AI(Gemini)는 그 집계 결과를 **리포트 문장으로 옮기는 일만** �
 
 | 상황 | 받을 파일 |
 |---|---|
-| 처음 설치 | **[`release/SBCP_Setup_v2.0.exe`](release/SBCP_Setup_v2.0.exe)**: 설치 마법사, 바로가기 생성 |
-| 이미 설치된 PC 업데이트 | **[`release/SBCP_Update_v2.0.exe`](release/SBCP_Update_v2.0.exe)**: 더블클릭하면 프로그램 파일만 교체. 재설치 불필요 |
+| 처음 설치 | **[`release/SBCP_Setup_v2.1.exe`](release/SBCP_Setup_v2.1.exe)**: 설치 마법사, 바로가기 생성 |
+| 이미 설치된 PC 업데이트 | **[`release/SBCP_Update_v2.1.exe`](release/SBCP_Update_v2.1.exe)**: 더블클릭하면 프로그램 파일만 교체. 재설치 불필요 |
 
 GitHub에서는 파일을 누른 뒤 오른쪽 위 **Download raw file(⬇)** 버튼으로 받습니다.
 
@@ -34,6 +34,13 @@ GitHub에서는 파일을 누른 뒤 오른쪽 위 **Download raw file(⬇)** �
 | 7절 | **업데이트(재설치 없이 업데이트 파일로)** · 제거 |
 
 ---
+
+## v2.1 변경 사항
+
+| 구분 | 내용 |
+|---|---|
+| 🔧 여성 목소리 | 음성 안내가 **여성 목소리**를 자동으로 고름(윈도우 기본 Heami, 엣지 SunHi 등). 남성 목소리는 자동 선택에서 제외 |
+| 🆕 목소리 선택 | 설정 → 화면 설정 → 음성 안내 아래 목록에서 PC에 있는 한국어 목소리를 직접 고를 수 있음(여성/남성 표시) |
 
 ## v2.0 변경 사항
 
@@ -128,8 +135,8 @@ sbcp-active/
 │   ├── build.py            설치 파일 빌드
 │   └── poster/             학생명단포스터(A4 PDF) 생성기 — 실제 명단은 data/ 에만 (인수인계서 8절)
 └── release/
-    ├── SBCP_Setup_v2.0.exe  처음 설치용
-    └── SBCP_Update_v2.0.exe 업데이트용
+    ├── SBCP_Setup_v2.1.exe  처음 설치용
+    └── SBCP_Update_v2.1.exe 업데이트용
 ```
 
 개발 중에는 `index.html` 을 브라우저로 바로 열어 확인할 수 있습니다(css·js 폴더를 함께 읽음).
@@ -179,6 +186,10 @@ python3 tools/build.py
 ---
 
 ## 개발 로그
+
+### v2.1
+
+- **여성 목소리**: 브라우저는 목소리의 성별을 알려 주지 않습니다. 그래서 알려진 한국어 목소리 이름으로 가립니다(`VOICE_FEMALE`, `VOICE_MALE`). 이름을 모르는 목소리가 남성일 수도 있으므로, 설정에서 직접 고르는 목록을 함께 넣었습니다.
 
 ### v2.0
 
