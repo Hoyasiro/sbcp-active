@@ -675,3 +675,8 @@ body, .content-card, .list-container, .input-area,
 .pepero-hearts span:nth-child(5) { left:79%; animation-delay:2.4s; font-size:20px; }
 .pepero-hearts span:nth-child(6) { left:91%; animation-delay:3.7s; font-size:14px; }
 @keyframes peperoFloat { 0% { transform:translateY(0) rotate(-8deg); opacity:0; } 12% { opacity:1; } 100% { transform:translateY(-330px) rotate(14deg); opacity:0; } }
+
+/* ================= 설정: 음성 안내 (v2.0) ================= */
+.voice-row { gap:10px; }
+.voice-status { flex:1; min-width:0; font-size:12px; color:var(--text2); line-height:1.5; }
+.voice-test { width:auto; flex-shrink:0; margin:0; padding:8px 14px; }

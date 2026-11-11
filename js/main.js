@@ -1,5 +1,5 @@
-// [v1.9 업데이트] 앱 버전 — 출결 데스크 오른쪽 원생 명단, 빼빼로데이(2026-11-11) 등원 축하 문구
-var APP_VERSION = 'Acad-atd-03_1.9 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
+// [v2.0 업데이트] 앱 버전 — 등·하원 음성 안내 (빼빼로데이 2026-11-11에는 축하 멘트 추가)
+var APP_VERSION = 'Acad-atd-03_2.0 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
 var STORAGE_KEY = 'acad-atd-03_1.4';
 
 var DEF_SETTINGS = { academyName:'삼성영어 셀레나', phone:'' };
@@ -221,6 +221,7 @@ function processAttend(no){
 
   if(!s){
     showResult('error','등록번호 '+padded+' 없음','등록되지 않은 번호입니다.');
+    speak('등록되지 않은 번호입니다. 번호를 다시 확인해 주세요.');
     input.value=''; input.focus(); return;
   }
 
@@ -251,6 +252,7 @@ function processAttend(no){
     undoAction = function(){ cancelAttend(s.id, 'outTime', true); };
   } else {
     showResult('error', s.name+' 학생', '오늘 등/하원이 모두 완료되었습니다.');
+    speak(s.name+' 학생, 오늘 등원과 하원이 이미 모두 완료되었습니다.');
     input.value=''; input.focus(); return;
   }
 
@@ -259,6 +261,7 @@ function processAttend(no){
   renderRecent();
   renderRank3Group();
   showUndoToast(s.name+' 학생 '+(isOut?'하원':'등원')+' 완료', undoAction);
+  speak(isOut ? checkoutVoiceText(s, stayMin) : checkinVoiceText(s, st.currentStreak, isNewBest));
 
   if(!isOut) openRecordPopup(s.id, isNewBest);
 
@@ -271,6 +274,52 @@ function processAttend(no){
 // PC 날짜가 바뀌면 저절로 꺼지므로 다음 날 따로 되돌릴 것이 없다. (다음 버전에서 이 구역을 지워도 됨)
 var PEPERO_DAY = '2026-11-11';
 function isPeperoDay(){ return today() === PEPERO_DAY; }
+
+// ===== 음성 안내 (v2.0) =====
+// 브라우저에 들어 있는 음성 합성(Web Speech API)을 쓴다. 인터넷·AI 키 없이 동작하고, 목소리는 PC(윈도우)에 설치된 한국어 음성이다.
+// 멘트 문장은 아래 두 함수가 정한다 — 문구를 바꾸려면 여기만 고치면 된다.
+function checkinVoiceText(s, streak, isNewBest){
+  var t = s.name + ' 학생, 등원했습니다.';
+  if(isNewBest) t += ' 연속 ' + streak + '일 출석, 신기록이에요!';
+  else if(streak >= 2) t += ' 연속 ' + streak + '일 출석 중이에요.';
+  else t += ' 오늘도 화이팅!';
+  if(isPeperoDay()) t += ' 해피 빼빼로 데이! 원장님을 찾아가 빼빼로를 받아가요.';   // 2026-11-11 하루만
+  return t;
+}
+function checkoutVoiceText(s, stayMin){
+  return s.name + ' 학생, 하원했습니다. 오늘 ' + stayMin + '분 공부했어요. 안녕히 가세요.';
+}
+
+function koreanVoice(){
+  if(!window.speechSynthesis) return null;
+  var vs = speechSynthesis.getVoices().filter(function(v){ return /^ko([-_]|$)/i.test(v.lang); });
+  // 같은 한국어라도 PC에 설치된 음성(오프라인)을 먼저 쓴다 — 인터넷이 끊겨도 소리가 나도록
+  return vs.filter(function(v){ return v.localService; })[0] || vs[0] || null;
+}
+function speak(text, force){
+  if(!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
+  if(!force && UI.voice !== 'on') return false;
+  try {
+    speechSynthesis.cancel();                      // 앞 학생 멘트가 남아 있으면 끊고 새 멘트를 바로 말한다
+    var u = new SpeechSynthesisUtterance(text);
+    var v = koreanVoice();
+    if(v) u.voice = v;
+    u.lang = 'ko-KR'; u.rate = 1.05; u.pitch = 1.1; u.volume = 1;
+    speechSynthesis.speak(u);
+    return true;
+  } catch(e){ console.error('음성 안내 실패:', e); return false; }
+}
+function renderVoiceStatus(){
+  var el = document.getElementById('voiceStatus');
+  if(!el) return;
+  if(!window.speechSynthesis){ el.textContent = '이 브라우저는 음성 안내를 지원하지 않습니다.'; return; }
+  var v = koreanVoice();
+  el.textContent = v ? ('목소리: ' + v.name) : '한국어 음성을 찾지 못했습니다. (윈도우 설정 → 시간 및 언어 → 음성에서 한국어 추가)';
+}
+if(window.speechSynthesis){
+  speechSynthesis.getVoices();                     // 음성 목록은 늦게 채워지므로 미리 불러 둔다
+  if(speechSynthesis.addEventListener) speechSynthesis.addEventListener('voiceschanged', renderVoiceStatus);
+}
 
 // ===== 기록 팝업 =====
 function openRecordPopup(sid, isNewBest){
@@ -1977,7 +2026,7 @@ document.addEventListener('DOMContentLoaded', function(){
 // 업데이트 파일(SBCP_Update_*.exe)은 프로그램 파일만 바꾼다.
 // 새 버전으로 처음 열렸을 때 한 번만 알려 주어, 업데이트가 적용됐는지 눈으로 확인할 수 있게 한다.
 var LAST_VERSION_KEY = 'acad-last-version';
-var WHATS_NEW = '출결 데스크 오른쪽에 원생 명단(번호·이름)이 항상 표시됩니다.';
+var WHATS_NEW = '등·하원 체크를 하면 음성으로 안내합니다. (설정 → 화면 설정에서 끌 수 있음)';
 
 document.addEventListener('DOMContentLoaded', function(){
   var prev = null;
@@ -1992,7 +2041,7 @@ document.addEventListener('DOMContentLoaded', function(){
 // ===== 화면 설정: 사이드바 숨기기 · 화면 자동 맞춤 · 시작 시 전체 화면 =====
 // 출결 데스크 PC 전용 화면 설정이라 출결 DB와 분리해 이 브라우저에만 저장한다 (백업 대상 아님).
 var UI_KEY = 'acad-ui';
-var UI_DEFAULT = { sidebar:'hidden', autoFull:'on', scale:'auto' };
+var UI_DEFAULT = { sidebar:'hidden', autoFull:'on', scale:'auto', voice:'on' };
 var UI = (function(){
   try { return Object.assign({}, UI_DEFAULT, JSON.parse(localStorage.getItem(UI_KEY) || '{}')); }
   catch(e){ return Object.assign({}, UI_DEFAULT); }
@@ -2035,6 +2084,7 @@ function renderUiSettings(){
   });
   var sel = document.getElementById('uiScaleSelect');
   if(sel) sel.value = String(UI.scale);
+  renderVoiceStatus();
   applyScale();
 }
 
@@ -2084,6 +2134,10 @@ document.addEventListener('DOMContentLoaded', function(){
   var sel = document.getElementById('uiScaleSelect');
   if(sel) sel.addEventListener('change', function(){
     UI.scale = this.value; saveUi(); renderUiSettings(); setTimeout(function(){ fitBoardText(); fitRoster(); }, 300);
+  });
+  var vt = document.getElementById('voiceTestBtn');
+  if(vt) vt.addEventListener('click', function(){
+    if(!speak(checkinVoiceText({name:'홍길동'}, 3, false), true)) showToast('이 브라우저에서는 음성 안내를 쓸 수 없습니다.');
   });
   var full = document.getElementById('fullToggleBtn');
   if(full) full.addEventListener('click', function(){
