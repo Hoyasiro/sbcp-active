@@ -1,5 +1,5 @@
-// [v2.1 업데이트] 앱 버전 — 음성 안내를 여성 목소리로 (목소리 직접 선택 가능)
-var APP_VERSION = 'Acad-atd-03_2.1 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
+// [v2.2 업데이트] 앱 버전 — 빼빼로데이(2026-11-11) 축하를 화면 전체를 덮는 크기로
+var APP_VERSION = 'Acad-atd-03_2.2 (Desktop)';   // 저장 키(STORAGE_KEY)는 1.4 그대로 — 기존 데이터 유지
 var STORAGE_KEY = 'acad-atd-03_1.4';
 
 var DEF_SETTINGS = { academyName:'삼성영어 셀레나', phone:'' };
@@ -215,6 +215,7 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 function processAttend(no){
+  hidePeperoSplash();   // 앞 학생의 축하 화면이 떠 있으면 닫고 처리한다 (평소에는 아무 일도 없음)
   var input=document.getElementById('numInput');
   var padded=no.padStart(2,'0');
   var s=DB.students.find(function(x){return x.no===padded;});
@@ -274,6 +275,32 @@ function processAttend(no){
 // PC 날짜가 바뀌면 저절로 꺼지므로 다음 날 따로 되돌릴 것이 없다. (다음 버전에서 이 구역을 지워도 됨)
 var PEPERO_DAY = '2026-11-11';
 function isPeperoDay(){ return today() === PEPERO_DAY; }
+
+// 화면 전체를 덮는 축하 화면 (v2.2). 등원 팝업보다 위에 뜨고, 화면을 누르거나 Enter·Esc, 또는 8초 뒤에 닫히면
+// 그 아래에 평소 등원 팝업이 그대로 보인다. 다음 학생이 번호를 입력해도 닫힌다(processAttend 첫머리).
+var PEPERO_SPLASH_MS = 8000;
+var _peperoT = null;
+function showPeperoSplash(s){
+  var el = document.getElementById('peperoSplash');
+  if(!el) return;
+  document.getElementById('peperoWho').textContent = s.name + ' 학생';
+  el.hidden = true; void el.offsetWidth; el.hidden = false;   // 연달아 등원해도 애니메이션이 처음부터 다시 돌게 한다
+  clearTimeout(_peperoT);
+  _peperoT = setTimeout(hidePeperoSplash, PEPERO_SPLASH_MS);
+}
+function hidePeperoSplash(){
+  clearTimeout(_peperoT);
+  var el = document.getElementById('peperoSplash');
+  if(!el || el.hidden) return;
+  el.hidden = true;
+  var home = document.getElementById('screen-home');
+  if(home && home.classList.contains('active')) setTimeout(function(){ document.getElementById('numInput').focus(); }, 50);
+}
+document.addEventListener('DOMContentLoaded', function(){
+  var el = document.getElementById('peperoSplash');
+  if(el) el.addEventListener('click', hidePeperoSplash);
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' || e.key === 'Enter') hidePeperoSplash(); });
+});
 
 // ===== 음성 안내 (v2.0) =====
 // 브라우저에 들어 있는 음성 합성(Web Speech API)을 쓴다. 인터넷·AI 키 없이 동작하고, 목소리는 PC(윈도우)에 설치된 한국어 음성이다.
@@ -373,10 +400,8 @@ function openRecordPopup(sid, isNewBest){
   document.getElementById('recStreakRank').textContent = streakRank ? (streakRank+'위 / '+DB.students.length+'명') : '-';
   document.getElementById('recLastWeek').innerHTML = lastWeekHtml(sid, true);
 
-  var pepero = isPeperoDay();
-  document.getElementById('peperoBanner').hidden = !pepero;
-  document.getElementById('recordCard').classList.toggle('pepero', pepero);
   document.getElementById('recordCard').scrollTop = 0;
+  if(isPeperoDay()) showPeperoSplash(s);   // 2026-11-11 하루만: 등원 팝업 위에 화면 전체 축하 화면
 
   document.getElementById('recordMov').classList.add('show');
 }
@@ -2056,7 +2081,7 @@ document.addEventListener('DOMContentLoaded', function(){
 // 업데이트 파일(SBCP_Update_*.exe)은 프로그램 파일만 바꾼다.
 // 새 버전으로 처음 열렸을 때 한 번만 알려 주어, 업데이트가 적용됐는지 눈으로 확인할 수 있게 한다.
 var LAST_VERSION_KEY = 'acad-last-version';
-var WHATS_NEW = '등·하원 체크를 하면 여성 목소리로 안내합니다. (설정 → 화면 설정에서 끄거나 목소리 변경)';
+var WHATS_NEW = '등·하원 음성 안내(여성 목소리)와 원생 명단이 추가되었습니다.';
 
 document.addEventListener('DOMContentLoaded', function(){
   var prev = null;

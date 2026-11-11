@@ -633,48 +633,57 @@ body, .content-card, .list-container, .input-area,
   .roster-list { overflow:visible; grid-auto-flow:row; grid-template-columns:repeat(2, minmax(0, 1fr)); grid-template-rows:none; grid-auto-rows:36px; }
 }
 
-/* ================= 빼빼로데이 등원 팝업 (2026-11-11 하루만 표시) ================= */
-.record-card.pepero { max-width:520px; }
-.record-card.pepero .record-hero { padding:16px 24px 18px; }
-.record-card.pepero .record-emoji { display:none; }
-/* 축하 칸만큼 길어지므로 기록 4칸을 한 줄로 놓아 1080 높이 화면에서 스크롤 없이 '확인' 버튼까지 보이게 한다 */
-.record-card.pepero .record-grid { grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; }
-.record-card.pepero .record-stat { padding:14px 4px; }
-.record-card.pepero .record-stat-num { font-size:24px; }
-.record-card.pepero .record-stat-label { font-size:11px; }
-@media (max-width: 768px) { .record-card.pepero .record-grid { grid-template-columns:1fr 1fr; } }
-.pepero-banner[hidden] { display:none; }
-.pepero-banner { position:relative; overflow:hidden; text-align:center; padding:26px 24px 24px; color:#fff8ec;
+/* ================= 빼빼로데이 축하 화면 (2026-11-11 하루만, 화면 전체) ================= */
+/* 크기는 1920×1080 설계 기준 px — 화면 자동 맞춤(html zoom)이 모니터에 맞게 함께 키우고 줄인다 */
+.pepero-splash[hidden] { display:none; }
+.pepero-splash { position:fixed; inset:0; z-index:400; overflow:hidden; cursor:pointer; display:flex; align-items:center; justify-content:center; text-align:center; color:#fff8ec;
+  animation:peperoIn .35s ease both;
   background:
-    radial-gradient(circle at 12% 18%, rgba(255,255,255,.16), transparent 34%),
-    radial-gradient(circle at 88% 82%, rgba(255,214,102,.20), transparent 38%),
+    radial-gradient(circle at 12% 16%, rgba(255,255,255,.18), transparent 32%),
+    radial-gradient(circle at 88% 86%, rgba(255,214,102,.24), transparent 36%),
     linear-gradient(135deg, #e5243b 0%, #c2122f 55%, #8f0d28 100%); }
-.pepero-sticks { position:relative; height:132px; margin:0 auto 6px; width:220px; }
-.pepero-sticks i { position:absolute; left:50%; bottom:0; width:15px; height:128px; margin-left:-7.5px; border-radius:8px 8px 5px 5px; transform-origin:50% 100%;
+@keyframes peperoIn { from { opacity:0; transform:scale(1.04); } to { opacity:1; transform:none; } }
+.pepero-inner { position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; padding:0 40px; max-width:100%; }
+.pepero-sticks { position:relative; height:330px; width:560px; max-width:100%; margin-bottom:20px; }
+.pepero-sticks i { position:absolute; left:50%; bottom:0; width:38px; height:320px; margin-left:-19px; border-radius:19px 19px 12px 12px; transform-origin:50% 100%;
   background:linear-gradient(180deg, #5b2d17 0%, #3e1c0d 74%, #f0c488 74%, #dca963 100%);
-  box-shadow:inset 3px 0 0 rgba(255,255,255,.18), inset -3px 0 0 rgba(0,0,0,.18), 0 6px 14px rgba(0,0,0,.28);
+  box-shadow:inset 8px 0 0 rgba(255,255,255,.18), inset -8px 0 0 rgba(0,0,0,.18), 0 14px 30px rgba(0,0,0,.30);
   animation:peperoPop .7s cubic-bezier(.34,1.56,.64,1) both; }
-.pepero-sticks i:nth-child(1) { --r:-34deg; animation-delay:.05s; }
-.pepero-sticks i:nth-child(2) { --r:-17deg; animation-delay:.13s; background:linear-gradient(180deg, #fbe9d2 0%, #f3d2ae 74%, #f0c488 74%, #dca963 100%); }
-.pepero-sticks i:nth-child(3) { --r:0deg;   animation-delay:.21s; }
-.pepero-sticks i:nth-child(4) { --r:17deg;  animation-delay:.29s; background:linear-gradient(180deg, #ff9fc4 0%, #f26ea3 74%, #f0c488 74%, #dca963 100%); }
-.pepero-sticks i:nth-child(5) { --r:34deg;  animation-delay:.37s; }
+.pepero-sticks i:nth-child(1) { --r:-34deg; animation-delay:.15s; }
+.pepero-sticks i:nth-child(2) { --r:-17deg; animation-delay:.23s; background:linear-gradient(180deg, #fbe9d2 0%, #f3d2ae 74%, #f0c488 74%, #dca963 100%); }
+.pepero-sticks i:nth-child(3) { --r:0deg;   animation-delay:.31s; }
+.pepero-sticks i:nth-child(4) { --r:17deg;  animation-delay:.39s; background:linear-gradient(180deg, #ff9fc4 0%, #f26ea3 74%, #f0c488 74%, #dca963 100%); }
+.pepero-sticks i:nth-child(5) { --r:34deg;  animation-delay:.47s; }
 @keyframes peperoPop { from { transform:rotate(0deg) scaleY(.1); opacity:0; } to { transform:rotate(var(--r)) scaleY(1); opacity:1; } }
-.pepero-date, .pepero-title, .pepero-msg { position:relative; z-index:1; }   /* 떠오르는 하트보다 글자가 위 */
-.pepero-date { display:inline-block; font-family:'Outfit',sans-serif; font-weight:800; font-size:13px; letter-spacing:4px; padding:4px 14px 4px 18px; border-radius:20px; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35); margin-bottom:10px; }
-.pepero-title { font-family:'Outfit','Noto Sans KR',sans-serif; font-size:40px; font-weight:900; line-height:1.15; letter-spacing:-1px; text-shadow:0 3px 0 rgba(0,0,0,.18); animation:peperoRise .6s .35s ease both; }
+.pepero-date { font-family:'Outfit',sans-serif; font-weight:800; font-size:26px; letter-spacing:8px; padding:8px 28px 8px 36px; border-radius:40px; background:rgba(255,255,255,.18); border:2px solid rgba(255,255,255,.35); }
+.pepero-who { margin-top:26px; font-size:46px; font-weight:900; letter-spacing:-1px; animation:peperoRise .6s .4s ease both; }
+.pepero-title { font-family:'Outfit','Noto Sans KR',sans-serif; font-size:150px; font-weight:900; line-height:1.1; letter-spacing:-4px; white-space:nowrap; text-shadow:0 8px 0 rgba(0,0,0,.18); animation:peperoRise .6s .5s ease both; }
 .pepero-title b { color:#ffe066; font-weight:900; }
-.pepero-msg { display:inline-block; margin-top:14px; padding:11px 22px; border-radius:16px; background:#fff8ec; color:#7a1023; font-size:18px; font-weight:800; box-shadow:0 6px 18px rgba(0,0,0,.22); animation:peperoRise .6s .5s ease both; }
+.pepero-msg { margin-top:34px; padding:26px 56px; border-radius:36px; background:#fff8ec; color:#7a1023; font-size:54px; font-weight:800; white-space:nowrap; box-shadow:0 16px 40px rgba(0,0,0,.26); animation:peperoRise .6s .65s ease both; }
 .pepero-msg b { color:#d81e3f; font-weight:900; }
-@keyframes peperoRise { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
-.pepero-hearts span { position:absolute; bottom:-24px; color:rgba(255,255,255,.55); font-size:18px; animation:peperoFloat 4.5s linear infinite; }
-.pepero-hearts span:nth-child(1) { left:8%;  animation-delay:0s; }
-.pepero-hearts span:nth-child(2) { left:22%; animation-delay:1.6s; font-size:13px; }
-.pepero-hearts span:nth-child(3) { left:38%; animation-delay:3.1s; font-size:11px; }
-.pepero-hearts span:nth-child(4) { left:64%; animation-delay:.8s;  font-size:12px; }
-.pepero-hearts span:nth-child(5) { left:79%; animation-delay:2.4s; font-size:20px; }
-.pepero-hearts span:nth-child(6) { left:91%; animation-delay:3.7s; font-size:14px; }
-@keyframes peperoFloat { 0% { transform:translateY(0) rotate(-8deg); opacity:0; } 12% { opacity:1; } 100% { transform:translateY(-330px) rotate(14deg); opacity:0; } }
+.pepero-hint { margin-top:30px; font-size:18px; font-weight:700; color:rgba(255,255,255,.6); }
+@keyframes peperoRise { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:none; } }
+.pepero-hearts span { position:absolute; bottom:-60px; color:rgba(255,255,255,.5); font-size:48px; animation:peperoFloat 6s linear infinite; }
+.pepero-hearts span:nth-child(1)  { left:5%;  animation-delay:0s; }
+.pepero-hearts span:nth-child(2)  { left:14%; animation-delay:2.2s; font-size:30px; }
+.pepero-hearts span:nth-child(3)  { left:24%; animation-delay:4.1s; font-size:64px; }
+.pepero-hearts span:nth-child(4)  { left:33%; animation-delay:1.1s; font-size:26px; }
+.pepero-hearts span:nth-child(5)  { left:45%; animation-delay:3.3s; font-size:36px; }
+.pepero-hearts span:nth-child(6)  { left:56%; animation-delay:.6s;  font-size:28px; }
+.pepero-hearts span:nth-child(7)  { left:66%; animation-delay:4.8s; font-size:56px; }
+.pepero-hearts span:nth-child(8)  { left:76%; animation-delay:2.8s; font-size:32px; }
+.pepero-hearts span:nth-child(9)  { left:86%; animation-delay:1.6s; font-size:70px; }
+.pepero-hearts span:nth-child(10) { left:94%; animation-delay:3.9s; font-size:34px; }
+@keyframes peperoFloat { 0% { transform:translateY(0) rotate(-8deg); opacity:0; } 10% { opacity:1; } 100% { transform:translateY(-1250px) rotate(14deg); opacity:0; } }
+@media (max-width: 768px) {
+  .pepero-sticks { height:170px; width:280px; }
+  .pepero-sticks i { width:20px; height:164px; margin-left:-10px; border-radius:10px 10px 6px 6px; }
+  .pepero-date { font-size:15px; letter-spacing:4px; padding:5px 16px 5px 20px; }
+  .pepero-who { font-size:24px; margin-top:16px; }
+  .pepero-title { font-size:44px; letter-spacing:-1px; white-space:normal; }
+  .pepero-msg { font-size:19px; padding:14px 20px; border-radius:20px; white-space:normal; margin-top:20px; }
+  .pepero-hint { font-size:13px; margin-top:18px; }
+}
 
 /* ================= 설정: 음성 안내 (v2.0) ================= */
 .voice-row { gap:10px; }
